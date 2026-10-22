@@ -39,3 +39,15 @@ variable "frontend_image_tag" {
   description = "Tag aprovada da imagem frontend fornecida pelo ambiente de deploy."
   type        = string
 }
+
+variable "enable_newrelic_apm" {
+  description = "Controla se o processo da aplicação exige a License Key New Relic entregue fora do Terraform."
+  type        = bool
+  default     = false
+}
+
+variable "deployment_environment" {
+  description = "Ambiente selecionado pelo GitHub Actions; local é o fallback de desenvolvimento."
+  type        = string
+  default     = "local"
+}

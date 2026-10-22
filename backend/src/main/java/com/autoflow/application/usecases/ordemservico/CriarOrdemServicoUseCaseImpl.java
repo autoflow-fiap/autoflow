@@ -62,7 +62,7 @@ public class CriarOrdemServicoUseCaseImpl implements CriarOrdemServicoUseCase {
         try {
             enviarLink.execute(salva, token.token());
         } catch (RuntimeException exception) {
-            log.error("Não foi possível enviar o link de acompanhamento da OS {}", salva.getNumeroOs(), exception);
+            log.error("Não foi possível enviar o link de acompanhamento da ordem de serviço", exception);
         }
         return new OrdemServicoCriadaOutput(salva, token.token());
     }

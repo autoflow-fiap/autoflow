@@ -1,0 +1,21 @@
+common:
+  app_name: autoflow-backend
+  distributed_tracing:
+    enabled: true
+  application_logging:
+    enabled: true
+    forwarding:
+      enabled: false
+    local_decorating:
+      enabled: true
+  transaction_tracer:
+    record_sql: obfuscated
+  attributes:
+    exclude:
+      - request.parameters.*
+      - request.headers.*
+      - request.uri
+      - http.url
+      - db.statement
+      - error.message
+      - exception.message
