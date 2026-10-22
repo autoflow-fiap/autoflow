@@ -32,6 +32,31 @@ spec:
                 name: autoflow-config
             - secretRef:
                 name: autoflow-secrets
+          env:
+            - name: NEW_RELIC_REQUIRED
+              value: "true"
+            - name: NEW_RELIC_LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: newrelic-license
+                  key: licenseKey
+                  optional: true
+            - name: NEW_RELIC_APP_NAME
+              value: autoflow-backend
+            - name: NEW_RELIC_DISTRIBUTED_TRACING_ENABLED
+              value: "true"
+            - name: NEW_RELIC_APPLICATION_LOGGING_ENABLED
+              value: "true"
+            - name: NEW_RELIC_APPLICATION_LOGGING_FORWARDING_ENABLED
+              value: "false"
+            - name: NEW_RELIC_APPLICATION_LOGGING_LOCAL_DECORATING_ENABLED
+              value: "true"
+            - name: NEW_RELIC_LABELS
+              valueFrom:
+                configMapKeyRef:
+                  name: autoflow-config
+                  key: NEW_RELIC_LABELS
+                  optional: true
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
@@ -43,7 +68,7 @@ spec:
               path: /actuator/health/readiness
               port: 8081
             failureThreshold: 3
-            timeoutSeconds: 5 
+            timeoutSeconds: 5
             periodSeconds: 20
           livenessProbe:
             httpGet:
@@ -51,6 +76,3 @@ spec:
               port: 8081
             timeoutSeconds: 5
             periodSeconds: 30
-          
-        
-          
