@@ -128,8 +128,8 @@ class UsuarioControllerTest {
     void deveFazerLogin() throws Exception {
 
         LoginRequest request =
-                new LoginRequest("usuario@email.com", "senha123");
-        LoginInput input = new LoginInput(request.email(), request.senha());
+                new LoginRequest("52998224725", "senha123");
+        LoginInput input = new LoginInput(request.cpfCnpj(), request.senha());
 
         when(loginUsuarioUseCase.execute(input))
                 .thenReturn(new LoginOutput("token-jwt-mockado"));

@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -49,6 +51,55 @@ class AuthIT extends AbstractIT {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         JsonNode body = parseJson(response.getBody());
         assertThat(body.get("email").asText()).isEqualTo(TestUtils.EMAIL_CLIENTE);
+    }
+
+    @ParameterizedTest(name = "deve manter login por CPF/CNPJ para o perfil {0}")
+    @CsvSource({
+            "ADMIN,admin.login@autoflow.test,52998224725",
+            "ATENDENTE,atendente.login@autoflow.test,16899535009",
+            "MECANICO,mecanico.login@autoflow.test,12345678909"
+    })
+    void deveManterLoginPorCpfCnpjESenha(
+            String role,
+            String email,
+            String cpfCnpj
+    ) {
+        jdbcTemplate.update(
+                "INSERT INTO usuarios (nome, cpf_cnpj, email, senha, role) VALUES (?, ?, ?, ?, ?)",
+                "Usuario Interno", cpfCnpj, email, passwordEncoder.encode(TestUtils.SENHA_PADRAO), role
+        );
+
+        ResponseEntity<String> login = restTemplate.postForEntity(
+                "/auth/login",
+                jsonEntity(Map.of("cpfCnpj", cpfCnpj, "senha", TestUtils.SENHA_PADRAO)),
+                String.class
+        );
+
+        assertThat(login.getStatusCode()).isEqualTo(HttpStatus.OK);
+        String token = parseJson(login.getBody()).get("token").asText();
+        assertThat(token).isNotBlank();
+
+        ResponseEntity<String> protectedResponse = get("/auth/mecanicos", token);
+        if ("MECANICO".equals(role)) {
+            assertThat(protectedResponse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        } else {
+            assertThat(protectedResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        }
+    }
+
+    @Test
+    @DisplayName("não deve confiar no perfil informado pelo JWT serverless")
+    void naoDeveConfiarNoRoleDoTokenServerless() {
+        restTemplate.postForEntity("/auth/cadastro", jsonEntity(
+                TestUtils.registroRequest("Maria", TestUtils.EMAIL_CLIENTE, TestUtils.CPF_CLIENTE, "CLIENTE")
+        ), String.class);
+
+        String tokenComRoleAdmin = gerarToken(TestUtils.CPF_CLIENTE, "ADMIN");
+
+        assertThat(get("/clientes/me", tokenComRoleAdmin).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(get("/auth/usuarios", tokenComRoleAdmin).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
     }
 
     @Test

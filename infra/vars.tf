@@ -6,24 +6,36 @@ variable "region_default" {
   default = "us-east-1"
 }
 
+variable "terraform_state_bucket" {
+  description = "Bucket externo que contém o state Terraform do RDS no ambiente Learner Lab."
+  type        = string
+}
+
+variable "rds_state_key" {
+  description = "Chave do state Terraform do RDS no bucket externo."
+  type        = string
+  default     = "rds/terraform.tfstate"
+}
+
 variable "cidr_vpc" {
   default = "10.0.0.0/16"
 }
 
-variable "role_arn" {
-  default = "arn:aws:iam::724623091343:role/LabRole"
-}
 variable "instance_type" {
   default = "t3.medium"
 }
 
-variable "database_password" {
-  description = "Senha do banco de dados RDS"
+variable "dockerhub_username" {
+  description = "Namespace do Docker Hub fornecido pelo ambiente de deploy."
   type        = string
-  sensitive   = true
 }
 
-variable "database_username" {
-  description = "Usuário do banco de dados"
+variable "backend_image_tag" {
+  description = "Tag aprovada da imagem backend fornecida pelo ambiente de deploy."
+  type        = string
+}
+
+variable "frontend_image_tag" {
+  description = "Tag aprovada da imagem frontend fornecida pelo ambiente de deploy."
   type        = string
 }

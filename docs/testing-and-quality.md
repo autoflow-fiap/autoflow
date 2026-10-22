@@ -68,4 +68,4 @@ Consulte:
 - [Checklist SOLID](quality/checklist-solid.md);
 - [Arquitetura](architecture.md);
 - [Convenção de pacotes](conventions/package-convention.md);
-- [Fluxo de CI/CD](cicd.md).
+- [Fluxo e gates atuais de CI/CD](../README.md#fluxo-do-cicd).

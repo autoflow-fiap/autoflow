@@ -152,7 +152,7 @@
                 "$ref": "#/components/schemas/LoginRequest"
               },
               "example": {
-                "email": "atendente@autoflow.com",
+                "cpfCnpj": "52998224725",
                 "senha": "<senha-do-ambiente>"
               }
             }
@@ -2926,10 +2926,9 @@
       "LoginRequest": {
         "type": "object",
         "properties": {
-          "email": {
+          "cpfCnpj": {
             "type": "string",
-            "format": "email",
-            "example": "atendente@autoflow.com"
+            "example": "52998224725"
           },
           "senha": {
             "type": "string",
@@ -2938,7 +2937,7 @@
           }
         },
         "required": [
-          "email",
+          "cpfCnpj",
           "senha"
         ]
       },

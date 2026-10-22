@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata: 
-  name: frontend-config
-data:
-  BACKEND_URL: http://${backend_service_address}
-
-

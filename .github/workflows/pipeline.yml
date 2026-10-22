@@ -2,272 +2,476 @@ name: Pipeline
 
 on:
   push:
-    branches: ["develop", "main"]
-
+    branches: [develop, main]
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: ["develop", "main"]
+    branches: [develop, main]
+  workflow_dispatch:
+    inputs:
+      smoke_tests_only:
+        description: Executar somente smoke tests
+        type: boolean
+        default: false
+      allow_destructive:
+        description: "Autorizar exclusões/substituições somente após revisar o resumo do plan"
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: autoflow-application-develop
+  cancel-in-progress: false
 
 jobs:
-
-  backend-test-sonar:
-    name: Backend Tests & SonarQube Analysis
+  backend-build:
+    name: Backend tests, build and SonarQube
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.smoke_tests_only }}
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
-
-      - name: Verify Docker for Testcontainers
-        run: docker info
-
-      - name: Cache SonarQube packages
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
-
-      - name: Cache Maven packages
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('backend/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
-
-      - name: Build and analyze
+          cache-dependency-path: backend/pom.xml
+      - run: docker info
+        name: Verificar Docker para Testcontainers
+      - name: Build and test backend, including Flyway integration
+        working-directory: backend
+        run: mvn -B verify
+      - name: SonarQube analysis
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         working-directory: backend
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=BrunoSousa06_autoflow -Dsonar.qualitygate.wait=true -Dsonar.sources=src/main/java -Dsonar.tests=src/test/java
-
-      - name: Upload Backend Coverage
-        uses: actions/upload-artifact@v4
+        run: mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=BrunoSousa06_autoflow -Dsonar.qualitygate.wait=true -Dsonar.sources=src/main/java -Dsonar.tests=src/test/java
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: backend-coverage
-          path: backend/target/site/jacoco
+          name: backend-test-reports
+          path: |
+            backend/target/site/jacoco
+            backend/target/failsafe-reports
           if-no-files-found: ignore
 
-      - name: Upload Backend Integration Reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: backend-integration-reports
-          path: backend/target/failsafe-reports
-          if-no-files-found: ignore
-
-  backend-build:
-    name: Backend Build
+  frontend-build:
+    name: Frontend tests and build
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.smoke_tests_only }}
     runs-on: ubuntu-latest
-    needs: backend-test-sonar
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: maven
-
-      - name: Build Backend
-        working-directory: backend
-        run: mvn package -DskipTests
-
-  frontend-test:
-    name: Frontend Tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
-      - name: Install Dependencies
-        working-directory: frontend
+      - working-directory: frontend
         run: npm ci
-
-      - name: Run Frontend Tests
-        working-directory: frontend
+      - working-directory: frontend
         run: npm run test:ci
-
-      - name: Upload Frontend Coverage
-        uses: actions/upload-artifact@v4
+      - working-directory: frontend
+        run: npm run build
+      - name: Testar Nginx, bundles e deep links do gateway
+        run: python -m unittest discover -s scripts -p "test_gateway_frontend.py" -v
+      - name: Testar aplicação segura do Secret Kubernetes
+        run: python -m unittest discover -s scripts -p "test_apply_k8s_secret.py" -v
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: frontend-coverage
           path: frontend/coverage/frontend
           if-no-files-found: ignore
 
-  frontend-build:
-    name: Frontend Build
+  terraform-static:
+    name: Terraform formatting and static validation
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.smoke_tests_only }}
     runs-on: ubuntu-latest
-    needs: frontend-test
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: hashicorp/setup-terraform@v3
         with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          terraform_version: "1.16.5"
+          terraform_wrapper: false
+      - name: Verificar formatação Terraform
+        run: terraform fmt -check -recursive infra
+      - name: Validar configuração em backend isolado
+        working-directory: infra
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
 
-      - name: Install Dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Build Frontend
-        working-directory: frontend
-        run: npm run build
   snyk-scan:
-    name: Snyk Security Scan
+    name: Snyk security scan
     runs-on: ubuntu-latest
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/develop') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
-      actions: read
       contents: read
       security-events: write
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     steps:
-      - uses: actions/checkout@master
-
-      - name: Setup Java
-        uses: actions/setup-java@master
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
-
-      - name: Install Snyk CLI
-        uses: snyk/actions/setup@master
-
-      - name: Run Snyk Open Source Scan
+      - uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce
+      - name: Snyk Open Source scan
+        id: snyk-open-source
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk test --sarif-file-output=snyk.sarif
-
-      - name: Build Docker Image for Scan
-        working-directory: backend
-        run: docker build -t autoflow-app:latest -f Dockerfile .
-
-      - name: Run Snyk Container Scan
+        run: snyk test --sarif-file-output=snyk-open-source.sarif
+      - name: Publicar alertas Snyk Open Source
+        if: always() && hashFiles('snyk-open-source.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk-open-source.sarif
+      - name: Build backend image for container scan
+        run: docker build --file backend/Dockerfile --tag autoflow-backend:${{ github.sha }} backend
+      - name: Snyk container scan
+        id: snyk-container
         continue-on-error: true
-        working-directory: backend
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk container test autoflow-app:latest --file=Dockerfile
+        run: snyk container test autoflow-backend:${{ github.sha }} --file=backend/Dockerfile --sarif-file-output=snyk-container.sarif
+      - name: Publicar alertas Snyk Container
+        if: always() && hashFiles('snyk-container.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk-container.sarif
 
-  docker-build:
-    name: Build Docker Images
+  docker-publish:
+    name: Publish immutable images to Docker Hub
     runs-on: ubuntu-latest
-    needs:  [backend-build, frontend-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-
+    needs: [backend-build, frontend-build, terraform-static]
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/develop'
     steps:
       - uses: actions/checkout@v4
-
-      - name: Docker Login
-        uses: docker/login-action@v3.0.0
+      - uses: docker/login-action@v3
         with:
-          username: 'brunosousa06'
+          username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Backend Docker Image
+      - uses: docker/setup-buildx-action@v3
+      - name: Publicar imagem backend vinculada ao commit
         uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
-          tags: brunosousa06/autoflow-backend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build Frontend Docker Image
+          tags: ${{ vars.DOCKERHUB_USERNAME }}/autoflow-backend:${{ github.sha }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+      - name: Publicar imagem frontend vinculada ao commit
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: brunosousa06/autoflow-frontend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ vars.DOCKERHUB_USERNAME }}/autoflow-frontend:${{ github.sha }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
-
-  deploy-aws:
-    name: Deploy AWS with Terraform
+  deploy-plan:
+    name: Plan de homologação no GitHub-hosted runner
     runs-on: ubuntu-latest
-    needs: docker-build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs: [backend-build, frontend-build, terraform-static, docker-publish]
+    if: always() && !(github.event_name == 'workflow_dispatch' && inputs.smoke_tests_only) && github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.backend-build.result == 'success' && needs.frontend-build.result == 'success' && needs.terraform-static.result == 'success' && needs.docker-publish.result == 'success'
+    outputs:
+      plan_sha256: ${{ steps.package.outputs.plan_sha256 }}
+      metadata_sha256: ${{ steps.package.outputs.metadata_sha256 }}
+      artifact_name: ${{ steps.package.outputs.artifact_name }}
     env:
-      TF_VAR_database_username: ${{ secrets.DATABASE_USERNAME }}
-      TF_VAR_database_password: ${{ secrets.DATABASE_PASSWORD }}
-
+      PLAN_ARTIFACT_NAME: autoflow-terraform-plan-${{ github.run_id }}-${{ github.run_attempt }}
+      ALLOW_DESTRUCTIVE: ${{ github.event_name == 'push' && 'true' || (github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false') }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      TF_STATE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
+      TF_STATE_KEY: ${{ vars.AWS_TF_STATE_KEY }}
+      TF_VAR_terraform_state_bucket: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
+      TF_VAR_dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}
+      TF_VAR_backend_image_tag: ${{ github.sha }}
+      TF_VAR_frontend_image_tag: ${{ github.sha }}
+      TF_VAR_gateway_public_origin: ${{ vars.API_GATEWAY_ORIGIN }}
+      TF_VAR_gateway_cors_origins: ${{ vars.API_GATEWAY_CORS_ORIGINS }}
+      TF_VAR_aws_allowed_account_ids: '["${{ vars.AWS_EXPECTED_ACCOUNT_ID }}"]'
+      TF_VAR_region_default: ${{ vars.AWS_REGION }}
+      TF_VAR_cluster_name: ${{ vars.EKS_CLUSTER_NAME }}
+      EKS_LEASE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
+      EKS_LEASE_KEY: ci/eks-endpoint-lease.json
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Validar configuração e credenciais AWS temporárias
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$AWS_ACCESS_KEY_ID"
+          test -n "$AWS_SECRET_ACCESS_KEY"
+          test -n "$AWS_SESSION_TOKEN"
+          test -n "$TF_STATE_BUCKET"
+          test -n "$TF_STATE_KEY"
+          test -n "$TF_VAR_aws_allowed_account_ids"
+          test -n "$TF_VAR_gateway_public_origin"
+          test -n "$TF_VAR_gateway_cors_origins"
+          test -n "$TF_VAR_cluster_name"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Verificar conta AWS esperada
+        env:
+          AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}
+        run: python scripts/verify_aws_account.py
+      - name: Registrar autorização temporária para reconciliação
+        run: python scripts/eks_endpoint_access.py reconcile
+      - name: Autorizar somente o IP público deste runner no EKS
+        id: runner-ip
+        run: |
+          set -euo pipefail
+          IP="$(curl -4fsS https://checkip.amazonaws.com | tr -d '\n')"
+          echo "ip=$IP" >> "$GITHUB_OUTPUT"
+          python scripts/eks_endpoint_access.py authorize --ip "$IP" --region "$AWS_REGION" --cluster "$TF_VAR_cluster_name"
+      - name: Rejeitar recursos Kubernetes sem Terraform State
+        run: |
+          set -euo pipefail
+          aws eks update-kubeconfig --name "$TF_VAR_cluster_name" --region "$AWS_REGION"
+          python scripts/state_resource_guard.py --bucket "$TF_STATE_BUCKET" --key "$TF_STATE_KEY" -- kubectl get deployment autoflow-backend -o name
+          python scripts/state_resource_guard.py --bucket "$TF_STATE_BUCKET" --key "$TF_STATE_KEY" -- kubectl get deployment autoflow-frontend -o name
+          python scripts/state_resource_guard.py --bucket "$TF_STATE_BUCKET" --key "$TF_STATE_KEY" -- kubectl get service autoflow-backend -o name
+          python scripts/state_resource_guard.py --bucket "$TF_STATE_BUCKET" --key "$TF_STATE_KEY" -- kubectl get service autoflow-frontend -o name
+          python scripts/state_resource_guard.py --bucket "$TF_STATE_BUCKET" --key "$TF_STATE_KEY" -- kubectl get configmap autoflow-config -o name
+          python scripts/state_resource_guard.py --bucket "$TF_STATE_BUCKET" --key "$TF_STATE_KEY" -- kubectl get service autoflow-backend-gateway -o name
+          python scripts/state_resource_guard.py --bucket "$TF_STATE_BUCKET" --key "$TF_STATE_KEY" -- kubectl get service autoflow-frontend-gateway -o name
+          python scripts/state_resource_guard.py --bucket "$TF_STATE_BUCKET" --key "$TF_STATE_KEY" -- kubectl get configmap autoflow-gateway-nginx -o name
+      - name: Preparar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.5"
+          terraform_wrapper: false
+      - name: Confirmar states existentes e inicializar backend
+        working-directory: infra
+        run: |
+          set -euo pipefail
+          aws s3api head-bucket --bucket "$TF_STATE_BUCKET"
+          terraform init -input=false -reconfigure \
+            -lockfile=readonly \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=$TF_STATE_KEY" \
+            -backend-config="region=$AWS_REGION" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+          terraform validate
+      - name: Vincular configuração a commit, Terraform, providers e backend
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: python scripts/terraform_plan_metadata.py --lock-file infra/.terraform.lock.hcl --output "$RUNNER_TEMP/plan-metadata.json"
+      - name: Criar plan sem imprimir conteúdo sensível
+        working-directory: infra
+        run: |
+          set -euo pipefail
+          trap 'status=$?; rm -f "$RUNNER_TEMP/terraform-plan.log" "$RUNNER_TEMP/terraform-plan.json"; if [ "$status" -ne 0 ]; then rm -f infra.tfplan; fi; exit "$status"' EXIT
+          terraform plan -input=false -no-color -out=infra.tfplan > "$RUNNER_TEMP/terraform-plan.log"
+          terraform show -json infra.tfplan > "$RUNNER_TEMP/terraform-plan.json"
+          python ../scripts/review_terraform_plan.py \
+            --plan-json "$RUNNER_TEMP/terraform-plan.json" \
+            --allow-destructive "$ALLOW_DESTRUCTIVE" >> "$GITHUB_STEP_SUMMARY"
+      - name: Criptografar plan e calcular hashes de integridade
+        id: package
+        env:
+          TF_PLAN_ENCRYPTION_KEY: ${{ secrets.TF_PLAN_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          trap 'rm -f infra/infra.tfplan' EXIT
+          test -n "$TF_PLAN_ENCRYPTION_KEY"
+          python -c 'import os; assert len(os.environ["TF_PLAN_ENCRYPTION_KEY"]) >= 32, "TF_PLAN_ENCRYPTION_KEY precisa ter ao menos 32 caracteres"'
+          mkdir -p "$RUNNER_TEMP/autoflow-plan"
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
+            -in infra/infra.tfplan \
+            -out "$RUNNER_TEMP/autoflow-plan/infra.tfplan.enc" \
+            -pass env:TF_PLAN_ENCRYPTION_KEY
+          cp "$RUNNER_TEMP/plan-metadata.json" "$RUNNER_TEMP/autoflow-plan/plan-metadata.json"
+          {
+            echo "plan_sha256=$(sha256sum "$RUNNER_TEMP/autoflow-plan/infra.tfplan.enc" | cut -d ' ' -f 1)"
+            echo "metadata_sha256=$(sha256sum "$RUNNER_TEMP/autoflow-plan/plan-metadata.json" | cut -d ' ' -f 1)"
+            echo "artifact_name=$PLAN_ARTIFACT_NAME"
+          } >> "$GITHUB_OUTPUT"
+      - name: Armazenar artifact criptografado com retenção mínima
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PLAN_ARTIFACT_NAME }}
+          path: |
+            ${{ runner.temp }}/autoflow-plan/infra.tfplan.enc
+            ${{ runner.temp }}/autoflow-plan/plan-metadata.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Limpar cópias locais temporárias do plan
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/autoflow-plan" "$RUNNER_TEMP/plan-metadata.json" infra/infra.tfplan
+          python scripts/eks_endpoint_access.py cleanup --region "$AWS_REGION" --cluster "$TF_VAR_cluster_name"
 
-      - name: Configure AWS credentials
+  deploy-apply:
+    name: Aprovação, Apply e rollout de homologação
+    runs-on: ubuntu-latest
+    needs: deploy-plan
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.smoke_tests_only) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/develop' }}
+    environment: homolog
+    env:
+      PLAN_ARTIFACT_NAME: ${{ needs.deploy-plan.outputs.artifact_name }}
+      EXPECTED_PLAN_SHA256: ${{ needs.deploy-plan.outputs.plan_sha256 }}
+      EXPECTED_METADATA_SHA256: ${{ needs.deploy-plan.outputs.metadata_sha256 }}
+      ALLOW_DESTRUCTIVE: ${{ github.event_name == 'push' && 'true' || (github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false') }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      TF_STATE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
+      TF_STATE_KEY: ${{ vars.AWS_TF_STATE_KEY }}
+      TF_VAR_terraform_state_bucket: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
+      TF_VAR_dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}
+      TF_VAR_backend_image_tag: ${{ github.sha }}
+      TF_VAR_frontend_image_tag: ${{ github.sha }}
+      TF_VAR_gateway_public_origin: ${{ vars.API_GATEWAY_ORIGIN }}
+      TF_VAR_gateway_cors_origins: ${{ vars.API_GATEWAY_CORS_ORIGINS }}
+      TF_VAR_aws_allowed_account_ids: '["${{ vars.AWS_EXPECTED_ACCOUNT_ID }}"]'
+      TF_VAR_region_default: ${{ vars.AWS_REGION }}
+      TF_VAR_cluster_name: ${{ vars.EKS_CLUSTER_NAME }}
+      EKS_LEASE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
+      EKS_LEASE_KEY: ci/eks-endpoint-lease.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Configurar credenciais temporárias AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: us-east-1
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-
-      - name: Terraform Init
-        working-directory: ./infra
-        run: terraform init
-
-      - name: Terraform Validate
-        working-directory: ./infra
-        run: terraform validate
-
-      - name: Terraform Plan
-        working-directory: ./infra
-        run: terraform plan
-
-      - name: Terraform Apply
-        working-directory: ./infra
-        run: terraform apply -auto-approve
-  
-  create-pr:
-    name: Create PR to main
-    needs: deploy-aws
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Create Pull Request
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Verificar conta AWS e sinalizador de proteção
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr create \
-            --base main \
-            --head develop \
-            --title "Criação de PR automatico para main" \
-            --body "Um Pull request automatico foi criado para a branch main após o deploy bem-sucedido do Terraform." \
-            || echo "PR ja existe e não sera criado."
+          set -euo pipefail
+          python scripts/verify_aws_account.py
+          test "${{ vars.TERRAFORM_APPLY_APPROVAL_CONFIGURED }}" = true
+          REVIEWERS=$(gh api "repos/$GITHUB_REPOSITORY/environments/homolog" --jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length')
+          test "$REVIEWERS" -gt 0
+      - name: Reconciliar autorização órfã anterior
+        run: python scripts/eks_endpoint_access.py reconcile --region "$AWS_REGION" --cluster "$TF_VAR_cluster_name"
+      - name: Autorizar somente o IP público deste runner no EKS
+        run: |
+          set -euo pipefail
+          IP="$(curl -4fsS https://checkip.amazonaws.com | tr -d '\n')"
+          python scripts/eks_endpoint_access.py authorize --ip "$IP" --region "$AWS_REGION" --cluster "$TF_VAR_cluster_name"
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.5"
+          terraform_wrapper: false
+      - name: Baixar artifact de plan desta execução
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.PLAN_ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/autoflow-plan
+      - name: Inicializar mesmo backend e verificar versão/configuração do plan
+        working-directory: infra
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          aws s3api head-bucket --bucket "$TF_STATE_BUCKET"
+          terraform init -input=false -reconfigure -lockfile=readonly \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=$TF_STATE_KEY" \
+            -backend-config="region=$AWS_REGION" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+          terraform validate
+      - name: Verificar integridade e igualdade da configuração; descriptografar plan
+        working-directory: infra
+        env:
+          TF_PLAN_ENCRYPTION_KEY: ${{ secrets.TF_PLAN_ENCRYPTION_KEY }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test -n "$EXPECTED_PLAN_SHA256"
+          test -n "$EXPECTED_METADATA_SHA256"
+          test -n "$TF_PLAN_ENCRYPTION_KEY"
+          python -c 'import os; assert len(os.environ["TF_PLAN_ENCRYPTION_KEY"]) >= 32, "TF_PLAN_ENCRYPTION_KEY precisa ter ao menos 32 caracteres"'
+          printf '%s  %s\n' "$EXPECTED_PLAN_SHA256" "$RUNNER_TEMP/autoflow-plan/infra.tfplan.enc" | sha256sum --check --status
+          printf '%s  %s\n' "$EXPECTED_METADATA_SHA256" "$RUNNER_TEMP/autoflow-plan/plan-metadata.json" | sha256sum --check --status
+          python ../scripts/terraform_plan_metadata.py --lock-file .terraform.lock.hcl --output "$RUNNER_TEMP/current-plan-metadata.json"
+          cmp --silent "$RUNNER_TEMP/current-plan-metadata.json" "$RUNNER_TEMP/autoflow-plan/plan-metadata.json"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
+            -in "$RUNNER_TEMP/autoflow-plan/infra.tfplan.enc" \
+            -out infra.tfplan \
+            -pass env:TF_PLAN_ENCRYPTION_KEY
+          terraform show -json infra.tfplan > "$RUNNER_TEMP/terraform-plan.json"
+          python ../scripts/review_terraform_plan.py \
+            --plan-json "$RUNNER_TEMP/terraform-plan.json" \
+            --allow-destructive "$ALLOW_DESTRUCTIVE" > "$RUNNER_TEMP/terraform-plan-summary.md"
+      - name: Preparar kubeconfig e validar acesso ao cluster privado
+        run: |
+          aws eks update-kubeconfig --name "$TF_VAR_cluster_name" --region "$AWS_REGION"
+          kubectl get nodes
+      - name: Aplicar Secret Kubernetes protegido
+        env:
+          AUTOFLOW_DB_USERNAME: ${{ secrets.AUTOFLOW_DB_USERNAME }}
+          AUTOFLOW_DB_PASSWORD: ${{ secrets.AUTOFLOW_DB_PASSWORD }}
+          AUTOFLOW_JWT_SECRET: ${{ secrets.AUTOFLOW_JWT_SECRET }}
+          AUTOFLOW_MAIL_PASSWORD: ${{ secrets.AUTOFLOW_MAIL_PASSWORD }}
+          AUTOFLOW_PUBLIC_TOKEN_SECRET: ${{ secrets.AUTOFLOW_PUBLIC_TOKEN_SECRET }}
+        run: python scripts/apply_k8s_secret.py
+      - name: Aplicar exatamente o plan aprovado e validado
+        working-directory: infra
+        run: |
+          set -euo pipefail
+          trap 'rm -f infra.tfplan "$RUNNER_TEMP/terraform-plan.json" "$RUNNER_TEMP/terraform-plan-summary.md" "$RUNNER_TEMP/terraform-apply.log"' EXIT
+          terraform apply -input=false infra.tfplan > "$RUNNER_TEMP/terraform-apply.log"
+      - name: Aguardar rollout e verificar saúde do backend e frontend
+        run: |
+          kubectl rollout status deployment/autoflow-backend --timeout=5m
+          kubectl rollout status deployment/autoflow-frontend --timeout=5m
+      - name: Limpar arquivos locais sensíveis do plan
+        if: always()
+        run: |
+          rm -rf infra/infra.tfplan "$RUNNER_TEMP/autoflow-plan" "$RUNNER_TEMP/current-plan-metadata.json" "$RUNNER_TEMP/terraform-plan.json" "$RUNNER_TEMP/terraform-plan-summary.md"
+          python scripts/eks_endpoint_access.py cleanup --region "$AWS_REGION" --cluster "$TF_VAR_cluster_name"
+
+  smoke-tests:
+    name: API Gateway smoke tests
+    runs-on: ubuntu-latest
+    needs: deploy-apply
+    if: always() && ((github.event_name == 'workflow_dispatch' && inputs.smoke_tests_only) || (needs.deploy-apply.result == 'success' && github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')))
+    permissions:
+      contents: read
+    env:
+      API_GATEWAY_ORIGIN: ${{ vars.API_GATEWAY_ORIGIN }}
+      API_GATEWAY_CORS_ORIGINS: ${{ vars.API_GATEWAY_CORS_ORIGINS }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Validar configuração dos smoke tests
+        run: |
+          set -euo pipefail
+          test -n "$API_GATEWAY_ORIGIN" || { echo "API_GATEWAY_ORIGIN não está configurada" >&2; exit 1; }
+          test -n "$AWS_REGION" || { echo "AWS_REGION não está configurada" >&2; exit 1; }
+          test -n "$AWS_EXPECTED_ACCOUNT_ID" || { echo "AWS_EXPECTED_ACCOUNT_ID não está configurada" >&2; exit 1; }
+          python -c 'import json, os; v=json.loads(os.environ["API_GATEWAY_CORS_ORIGINS"]); assert isinstance(v, list) and all(isinstance(x, str) and x.strip() for x in v), "API_GATEWAY_CORS_ORIGINS deve ser um array JSON de origens não vazias"'
+      - name: Executar smoke tests
+        run: python scripts/smoke_api_gateway.py "$API_GATEWAY_ORIGIN" --region "$AWS_REGION" --account "$AWS_EXPECTED_ACCOUNT_ID" --cors-origins "$API_GATEWAY_CORS_ORIGINS"

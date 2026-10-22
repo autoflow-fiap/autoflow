@@ -9,6 +9,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AuthService } from '../../../core/services/auth.service';
+import { cpfCnpjValidator } from '../../clientes/cliente.model';
 
 const ROLE_HOME: Record<string, string> = {
   CLIENTE: '/minha-conta/minhas-ordens',
@@ -43,12 +44,13 @@ export class LoginComponent {
   hidePassword = signal(true);
 
   form = this.fb.group({
-    email: ['', [Validators.required, Validators.email]],
+    cpfCnpj: ['', [Validators.required, cpfCnpjValidator()]],
     senha: ['', [Validators.required]]
   });
 
   submit(): void {
-    if (this.form.invalid) {
+    const { cpfCnpj, senha } = this.form.value;
+    if (this.form.invalid || !cpfCnpj?.trim()) {
       this.form.markAllAsTouched();
       return;
     }
@@ -56,16 +58,14 @@ export class LoginComponent {
     this.loading.set(true);
     this.errorMsg.set('');
 
-    const { email, senha } = this.form.value;
-
-    this.auth.login(email!, senha!).subscribe({
+    this.auth.login(cpfCnpj!, senha!).subscribe({
       next: () => {
         const role = this.auth.getRole() ?? '';
         const dest = ROLE_HOME[role] ?? '/dashboard';
         this.router.navigate([dest]);
       },
       error: () => {
-        this.errorMsg.set('E-mail ou senha inválidos. Verifique suas credenciais.');
+        this.errorMsg.set('CPF/CNPJ ou senha inválidos. Verifique suas credenciais.');
         this.loading.set(false);
       }
     });

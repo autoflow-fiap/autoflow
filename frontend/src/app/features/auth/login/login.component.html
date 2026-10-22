@@ -18,13 +18,11 @@
         <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
 
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>E-mail</mat-label>
-            <mat-icon matPrefix>email</mat-icon>
-            <input matInput formControlName="email" type="email" autocomplete="email" />
-            @if (form.controls.email.hasError('required')) {
-              <mat-error>E-mail obrigatório</mat-error>
-            } @else if (form.controls.email.hasError('email')) {
-              <mat-error>Formato de e-mail inválido</mat-error>
+            <mat-label>CPF ou CNPJ</mat-label>
+            <mat-icon matPrefix>badge</mat-icon>
+            <input matInput formControlName="cpfCnpj" autocomplete="username" />
+            @if (form.controls.cpfCnpj.hasError('required')) {
+              <mat-error>CPF/CNPJ obrigatório</mat-error>
             }
           </mat-form-field>
 

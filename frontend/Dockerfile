@@ -17,6 +17,8 @@ RUN npm run build -- --configuration=production
 
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 
+ARG NGINX_CONF=nginx.conf.template
+
 
 
 COPY --from=build \
@@ -25,7 +27,7 @@ COPY --from=build \
      /usr/share/nginx/html
 
 COPY --chown=nginx:nginx \
-     nginx.conf.template \
+     ${NGINX_CONF} \
      /etc/nginx/templates/default.conf.template
 
 EXPOSE 8080

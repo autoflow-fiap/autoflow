@@ -44,7 +44,7 @@ documentação.
 |----------------------------------------------------------------|-------------------------------------------|
 | `SPRING_DATASOURCE_URL`                                        | URL JDBC do PostgreSQL                    |
 | `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD`    | Acesso ao banco                           |
-| `JWT_SECRET` / `JWT_EXPIRATION`                                | Assinatura e validade do JWT              |
+| `JWT_SECRET` / `JWT_EXPIRATION`                                | Assinatura e validade do JWT; `JWT_SECRET` deve ser compartilhado com a Lambda de autenticação |
 | `MAIL_USERNAME` / `MAIL_PASSWORD`                              | Envio de e-mails                          |
 | `APP_PUBLIC_BASE_URL`                                          | URL pública da API nos links de orçamento |
 | `APP_PUBLIC_TOKEN_SECRET` / `APP_PUBLIC_TOKEN_EXPIRATION_DAYS` | Token público de orçamento                |
@@ -83,6 +83,10 @@ contrato REST.
 
 ## API e documentação
 
+Para a demonstração ponta a ponta do login serverless por CPF/CNPJ, use a
+[coleção Postman](postman/autoflow-serverless-auth.postman_collection.json) e o
+[roteiro de autenticação](../docs/openapi/README.md#demonstração-ponta-a-ponta-da-autenticação-serverless).
+
 - Swagger UI: <http://localhost:8081/swagger-ui.html>;
 - OpenAPI: <http://localhost:8081/v3/api-docs>;
 - [OpenAPI versionado](../docs/openapi/autoflow-api.json);
@@ -104,15 +108,15 @@ Os detalhes de validade, auditoria e efeitos na OS estão em [
 
 ## Contas do seed
 
-Para a demonstracao local da pos-graduacao, o seed cria contas com a senha `Senha@1234`:
+Para a demonstracao local da pos-graduacao, o seed cria contas com uma senha definida nas migrations. Consulte a configuracao local aprovada para obter credenciais de teste; nao mantenha senhas literais nesta documentacao:
 
-| E-mail                   | Perfil      |
-|--------------------------|-------------|
-| `admin@autoflow.com`     | `ADMIN`     |
-| `atendente@autoflow.com` | `ATENDENTE` |
-| `mecanico1@autoflow.com` | `MECANICO`  |
-| `mecanico2@autoflow.com` | `MECANICO`  |
-| `cliente@autoflow.com`   | `CLIENTE`   |
+| CPF/CNPJ      | E-mail                   | Perfil      |
+|---------------|--------------------------|-------------|
+| `52998224725` | `admin@autoflow.com`     | `ADMIN`     |
+| `16899535009` | `atendente@autoflow.com` | `ATENDENTE` |
+| `93541134780` | `mecanico1@autoflow.com` | `MECANICO`  |
+| `15350946056` | `mecanico2@autoflow.com` | `MECANICO`  |
+| `11144477735` | `cliente@autoflow.com`   | `CLIENTE`   |
 
 As migracoes `V36` e `V40` tambem criam contas complementares; a lista completa esta
 no [README principal](../README.md). Sao credenciais de demonstracao local e nao devem ser usadas em producao.
@@ -131,6 +135,9 @@ check JaCoCo configurado no Maven. Os detalhes estão em [`testing-and-quality.m
 ## Segurança
 
 - endpoints privados usam JWT e `@PreAuthorize`;
+- o login usa CPF/CNPJ e senha para todos os perfis; o JWT pode ser emitido pelo `/auth/login` ou pela Lambda serverless;
+  ambos usam HS256, `sub` com o CPF/CNPJ e o mesmo `JWT_SECRET`;
+- o perfil usado na autorização é carregado do banco pelo CPF/CNPJ do `sub`; o claim `role` do token não concede privilégios;
 - endpoints públicos são separados dos fluxos autenticados;
 - tokens públicos são aleatórios, expiráveis e persistidos como hash;
 - senhas e segredos devem ser injetados por ambiente ou Secret;

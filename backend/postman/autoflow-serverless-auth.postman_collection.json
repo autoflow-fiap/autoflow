@@ -1,0 +1,185 @@
+{
+  "info": {
+    "name": "AutoFlow - Autenticação serverless ponta a ponta",
+    "description": "Demonstra o login por CPF/CNPJ na Lambda/API Gateway e o uso do JWT em uma rota protegida do backend. Configure as variáveis antes de executar. Não inclua credenciais reais neste arquivo.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "authBaseUrl",
+      "value": "https://<api-id>.execute-api.<regiao>.amazonaws.com/<ambiente>"
+    },
+    {
+      "key": "backendBaseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "cpfCnpj",
+      "value": "<cpf-ou-cnpj-de-um-cliente-ativo>"
+    },
+    {
+      "key": "senha",
+      "value": "<senha-do-ambiente>"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "expiredToken",
+      "value": "<token-expirado-do-ambiente-controlado>"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Login serverless por CPF/CNPJ",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cpf_cnpj\": \"{{cpfCnpj}}\",\n  \"senha\": \"{{senha}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{authBaseUrl}}/auth/login",
+        "description": "A resposta 200 deve conter token, tokenType=Bearer e expiresIn. O script salva token para as requisições seguintes."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('login serverless retorna 200', function () { pm.response.to.have.status(200); });",
+              "const body = pm.response.json();",
+              "pm.test('resposta contém um Bearer token', function () {",
+              "  pm.expect(body.token).to.be.a('string').and.not.empty;",
+              "  pm.expect(body.tokenType).to.eql('Bearer');",
+              "  pm.expect(body.expiresIn).to.be.a('number');",
+              "});",
+              "pm.collectionVariables.set('token', body.token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Backend protegido com JWT",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": "{{backendBaseUrl}}/clientes/me",
+        "description": "Exige token de um CLIENTE ativo. O backend valida assinatura/expiração e carrega o perfil atual pelo CPF/CNPJ do subject."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('rota protegida aceita o JWT válido', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Credencial serverless inválida",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cpf_cnpj\": \"{{cpfCnpj}}\",\n  \"senha\": \"senha-incorreta-para-evidencia\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": "{{authBaseUrl}}/auth/login",
+        "description": "Usa um documento válido e uma senha incorreta para reproduzir a rejeição de credencial pela Lambda."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('credencial inválida retorna 401', function () { pm.response.to.have.status(401); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - JWT malformado no backend",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer token-malformado"
+          }
+        ],
+        "url": "{{backendBaseUrl}}/clientes/me",
+        "description": "Reproduz a rejeição de um token que não é um JWT válido. O backend responde 403 com a configuração atual do Spring Security."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('JWT malformado retorna 403', function () { pm.response.to.have.status(403); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - JWT expirado no backend",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{expiredToken}}"
+          }
+        ],
+        "url": "{{backendBaseUrl}}/clientes/me",
+        "description": "Preencha expiredToken com um JWT realmente expirado. Em ambiente controlado, configure JWT_EXPIRES_IN_SECONDS=1 na Lambda, faça login, aguarde dois segundos, copie o token e restaure a configuração normal."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('JWT expirado retorna 403', function () { pm.response.to.have.status(403); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

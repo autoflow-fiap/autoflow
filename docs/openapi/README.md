@@ -17,6 +17,7 @@ Use estas variáveis ao importar o OpenAPI em uma ferramenta compatível ou ao m
 | Variável            | Valor local sugerido         | Uso                                           |
 |---------------------|------------------------------|-----------------------------------------------|
 | `baseUrl`           | `http://localhost:8081`      | URL da API sem o prefixo `/api`               |
+| `authBaseUrl`       | `<url-base-do-api-gateway>`  | URL base da autenticação serverless           |
 | `frontendBaseUrl`   | `http://localhost:4200`      | URL do frontend, inclusive nos links públicos |
 | `jwtToken`          | `<token-retornado-no-login>` | Bearer token dos endpoints privados           |
 | `publicBudgetToken` | `<token-do-link-publico>`    | Token de acompanhamento do orçamento          |
@@ -38,7 +39,7 @@ POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 {
-  "email": "<usuario-do-ambiente>",
+  "cpfCnpj": "<cpf-ou-cnpj-do-usuario>",
   "senha": "<senha-do-ambiente>"
 }
 ```
@@ -76,6 +77,54 @@ credencial, não deve ser registrado em logs e possui validade configurada pelo 
 
 Cada operação está descrita individualmente no [OpenAPI versionado](autoflow-api.json), incluindo parâmetros, perfis,
 corpos e respostas. A sequência acima é apenas o fluxo operacional recomendado; não altera o contrato.
+
+## Demonstração ponta a ponta da autenticação serverless
+
+O login serverless e o login interno são fluxos distintos e continuam coexistindo:
+
+| Etapa | Endpoint | Credencial | Resultado |
+|---|---|---|---|
+| 1 | `POST {{authBaseUrl}}/auth/login` na Lambda/API Gateway | CPF/CNPJ e senha | JWT HS256 com `sub` igual ao CPF/CNPJ normalizado |
+| 2 | `GET {{backendBaseUrl}}/clientes/me` | `Authorization: Bearer <token>` | Dados do cliente autenticado, HTTP `200` |
+| Interno | `POST {{baseUrl}}/auth/login` no backend | CPF/CNPJ e senha | Login por CPF/CNPJ de `ADMIN`, `ATENDENTE`, `MECANICO` e `CLIENTE` |
+
+Importe a [coleção Postman](../../backend/postman/autoflow-serverless-auth.postman_collection.json), configure
+`authBaseUrl`, `backendBaseUrl`, `cpfCnpj` e `senha`, e execute as requisições na ordem numérica. A primeira requisição
+armazena o token automaticamente na variável `token`.
+
+Uma resposta de login bem-sucedida tem o formato:
+
+```json
+{
+  "token": "<jwt>",
+  "tokenType": "Bearer",
+  "expiresIn": 3600
+}
+```
+
+O mesmo token pode ser demonstrado no Swagger do backend em `http://localhost:8081/swagger-ui.html`: selecione
+`Authorize`, informe o JWT e execute `GET /clientes/me`. O login por CPF/CNPJ não aparece como operação do Swagger do
+backend porque é publicado separadamente pela API Gateway; o `POST /auth/login` do Swagger documenta o login interno
+por CPF/CNPJ.
+
+### Cenários negativos reproduzíveis
+
+| Cenário | Onde executar | Resultado esperado |
+|---|---|---|
+| CPF/CNPJ ou senha incorretos | Login serverless | HTTP `401`, sem token |
+| Documento ou corpo inválido | Login serverless | HTTP `400`, sem token |
+| JWT malformado ou com assinatura inválida | Qualquer rota protegida do backend | HTTP `403` |
+| JWT expirado | Qualquer rota protegida do backend | HTTP `403` |
+
+Para reproduzir a expiração de ponta a ponta sem versionar segredo, use um ambiente controlado: configure
+`JWT_EXPIRES_IN_SECONDS=1` na Lambda, faça o login, aguarde mais de um segundo e envie o token para
+`GET /clientes/me`. Depois restaure o valor normal do ambiente. A coleção também possui uma requisição dedicada para
+esse caso por meio da variável `expiredToken`.
+
+Os testes automatizados correspondentes ficam em `autoflow-lambda/test_handler.py`,
+`backend/src/test/java/com/autoflow/config/security/service/JwtServiceTest.java`,
+`backend/src/test/java/com/autoflow/config/security/JwtFilterTest.java` e
+`backend/src/test/java/com/autoflow/integration/AuthIT.java`.
 
 ## Cobertura de endpoints
 

@@ -1,51 +1,51 @@
-# Fluxo de Orcamento Publico
+# Fluxo de orçamento público
 
-Este documento descreve o fluxo de consulta, download, aprovacao e recusa de
-orcamentos por link publico. O fluxo nao exige login, mas exige um token
-aleatorio, armazenado somente como hash no banco e com prazo de validade.
+Este documento descreve o fluxo de consulta, download, aprovação e recusa de
+orçamentos por link público. O fluxo não exige login, mas exige um token
+aleatório, armazenado somente como hash no banco e com prazo de validade.
 
-## Visao geral
+## Visão geral
 
-1. O backend gera um token aleatorio quando publica o orcamento.
-2. O banco armazena o hash do token em `public_token_hash` e a expiracao em
+1. O backend gera um token aleatório quando publica o orçamento.
+2. O banco armazena o hash do token em `public_token_hash` e a expiração em
    `public_token_expira_em`.
 3. O cliente recebe no e-mail o link da pagina:
    `/public/orcamentos/{orcamentoId}?token={token}`.
-4. A pagina consulta o orcamento e permite baixar o PDF, aprovar ou recusar.
-5. As acoes de decisao sao enviadas por `POST`, evitando alterar o estado
+4. A página consulta o orçamento e permite baixar o PDF, aprovar ou recusar.
+5. As ações de decisão são enviadas por `POST`, evitando alterar o estado
    apenas pela abertura do link ou por scanners de e-mail.
 
 O token bruto nunca e persistido. O mesmo token tambem pode ser usado para
 baixar o PDF enquanto estiver valido.
 
-## Publicacao
+## Publicação
 
-A publicacao ocorre nos seguintes pontos:
+A publicação ocorre nos seguintes pontos:
 
-- finalizacao do diagnostico, para o orcamento principal;
-- criacao de reparo adicional, para o orcamento complementar.
+- finalização do diagnóstico, para o orçamento principal;
+- criação de reparo adicional, para o orçamento complementar.
 
-A publicacao gera dois links:
+A publicação gera dois links:
 
 | Link                                                            | Finalidade                           |
 |-----------------------------------------------------------------|--------------------------------------|
 | `app.public-base-url/public/orcamentos/{id}/pdf?token=...`      | Download direto do PDF pela API      |
-| `app.frontend-public-base-url/public/orcamentos/{id}?token=...` | Pagina publica de consulta e decisao |
+| `app.frontend-public-base-url/public/orcamentos/{id}?token=...` | Página pública de consulta e decisão |
 
-O e-mail informa os dois usos: download do PDF e acesso a pagina de decisao.
+O e-mail informa os dois usos: download do PDF e acesso à página de decisão.
 
-## Endpoints publicos
+## Endpoints públicos
 
-Todos os endpoints abaixo sao acessiveis sem `Authorization: Bearer`.
+Todos os endpoints abaixo são acessíveis sem `Authorization: Bearer`.
 
-### Consultar o orcamento
+### Consultar o orçamento
 
 ```http
 GET /public/orcamentos/{orcamentoId}?token={token}
 ```
 
-Retorna `OrcamentoResponse` sem dados de autenticacao, hash do token ou
-identificadores sensiveis do cliente.
+Retorna `OrcamentoResponse` sem dados de autenticação, hash do token ou
+identificadores sensíveis do cliente.
 
 ### Baixar o PDF
 
@@ -53,8 +53,8 @@ identificadores sensiveis do cliente.
 GET /public/orcamentos/{orcamentoId}/pdf?token={token}
 ```
 
-O PDF continua disponivel por token publico valido. Token invalido, expirado ou
-ausente nao libera o arquivo.
+O PDF continua disponível por token público válido. Token inválido, expirado ou
+ausente não libera o arquivo.
 
 ### Aprovar
 
@@ -67,8 +67,8 @@ Content-Type: application/json
 }
 ```
 
-O corpo e opcional. Quando `nome` nao e informado, o sistema usa o nome do
-cliente presente no snapshot do orcamento para a assinatura.
+O corpo é opcional. Quando `nome` não é informado, o sistema usa o nome do
+cliente presente no snapshot do orçamento para a assinatura.
 
 ### Recusar
 
@@ -82,41 +82,41 @@ Content-Type: application/json
 }
 ```
 
-O corpo e opcional. O motivo, quando informado, possui limite de 500
+O corpo é opcional. O motivo, quando informado, possui limite de 500
 caracteres; o nome da assinatura possui limite de 120 caracteres.
 
-## Regras de decisao
+## Regras de decisão
 
-- O token deve corresponder ao hash do orcamento e estar dentro do prazo.
-- Somente orcamentos `DISPONIVEL` aceitam uma nova decisao.
-- Repetir a mesma decisao e idempotente: aprovar um orcamento `APROVADO` ou
-  recusar um orcamento `REPROVADO` nao executa novamente os efeitos.
-- Decisoes conflitantes sao rejeitadas. Um orcamento `REPROVADO` nao pode ser
-  aprovado e um `APROVADO` nao pode ser recusado.
-- A decisao usa lock pessimista no orcamento para evitar concorrencia entre
+- O token deve corresponder ao hash do orçamento e estar dentro do prazo.
+- Somente orçamentos `DISPONIVEL` aceitam uma nova decisão.
+- Repetir a mesma decisão é idempotente: aprovar um orçamento `APROVADO` ou
+  recusar um orçamento `REPROVADO` não executa novamente os efeitos.
+- Decisões conflitantes são rejeitadas. Um orçamento `REPROVADO` não pode ser
+  aprovado e um `APROVADO` não pode ser recusado.
+- A decisão usa lock pessimista no orçamento para evitar concorrência entre
   duas requisicoes simultaneas.
 
 ## Efeitos na OS
 
-| Tipo do orcamento | Aprovacao                                  | Recusa                                           |
+| Tipo do orçamento | Aprovação                                  | Recusa                                           |
 |-------------------|--------------------------------------------|--------------------------------------------------|
 | Principal         | OS `AGUARDANDO_APROVACAO` -> `EM_EXECUCAO` | OS segue a regra vigente e vai para `FINALIZADA` |
 | Complementar      | Atualiza o reparo adicional vinculado      | Recusa o reparo adicional vinculado              |
 
-Os efeitos sao executados pelos mesmos casos de uso das decisoes autenticadas;
-o token publico apenas fornece uma forma segura de entrada.
+Os efeitos são executados pelos mesmos casos de uso das decisões autenticadas;
+o token público apenas fornece uma forma segura de entrada.
 
 ## Auditoria
 
-A decisao grava os seguintes dados no orcamento:
+A decisão grava os seguintes dados no orçamento:
 
 - `aprovado_em`, quando aprovado;
 - `reprovado_em`, quando recusado;
 - `assinatura_nome`, quando houver nome informado ou nome do cliente;
 - `recusa_motivo`, quando houver motivo.
 
-O hash e a expiracao do token ficam no registro do orcamento. O valor bruto do
-token nao e gravado em logs ou no banco.
+O hash e a expiração do token ficam no registro do orçamento. O valor bruto do
+token não é gravado em logs ou no banco.
 
 ## Erros
 
@@ -130,16 +130,16 @@ As regras de negocio usam o formato padrao da API:
 
 | Situacao                                      | HTTP esperado      |
 |-----------------------------------------------|--------------------|
-| Orcamento inexistente                         | `404 Not Found`    |
-| Token invalido, expirado ou divergente        | `401 Unauthorized` |
-| Orcamento indisponivel ou decisao conflitante | `400 Bad Request`  |
+| Orçamento inexistente                         | `404 Not Found`    |
+| Token inválido, expirado ou divergente        | `401 Unauthorized` |
+| Orçamento indisponível ou decisão conflitante | `400 Bad Request`  |
 | Campo acima do limite                         | `400 Bad Request`  |
 
-Em uma decisao rejeitada por token, o orcamento e a OS nao sofrem alteracao.
+Em uma decisão rejeitada por token, o orçamento e a OS não sofrem alteração.
 
 ## Configuracao
 
-O prazo padrao e de 7 dias e pode ser alterado por ambiente:
+O prazo padrão é de 7 dias e pode ser alterado por ambiente:
 
 ```bash
 APP_PUBLIC_TOKEN_EXPIRATION_DAYS=7
@@ -148,14 +148,14 @@ APP_PUBLIC_BASE_URL=https://api.exemplo.com
 FRONTEND_PUBLIC_BASE_URL=https://app.exemplo.com
 ```
 
-Em producao, configure um segredo forte e nao use o valor padrao de
-desenvolvimento. A alteracao de banco foi implementada pela migration
-`V44__add_expiracao_token_publico_orcamento.sql`; migrations anteriores nao
+Em produção, configure um segredo forte e não use o valor padrão de
+desenvolvimento. A alteração de banco foi implementada pela migration
+`V44__add_expiracao_token_publico_orcamento.sql`; migrations anteriores não
 devem ser editadas.
 
-## Validacao
+## Validação
 
-Os testes relacionados estao em:
+Os testes relacionados estão em:
 
 - `backend/src/test/java/com/autoflow/presentation/orcamento/PublicOrcamentoControllerTest.java`;
 - `backend/src/test/java/com/autoflow/application/usecases/orcamento/DecidirOrcamentoUseCaseTest.java`;
@@ -163,5 +163,5 @@ Os testes relacionados estao em:
 - `backend/src/test/java/com/autoflow/integration/PublicAcompanhamentoIT.java`;
 - `frontend/src/app/features/public/orcamento-publico.service.spec.ts`.
 
-A especificacao OpenAPI atualizada pode ser consultada no Swagger UI enquanto o
-backend estiver em execucao.
+A especificação OpenAPI atualizada pode ser consultada no Swagger UI enquanto o
+backend estiver em execução.

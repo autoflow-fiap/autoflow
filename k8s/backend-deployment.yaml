@@ -11,13 +11,15 @@ spec:
       app: autoflow-backend
   template:
     metadata:
+      annotations:
+        checksum/gateway-origin: "${gateway_origin_hash}"
       labels:
         app: autoflow-backend
     spec:
       containers:
         - name: autoflow-backend-container
-          image: brunosousa06/autoflow-backend:latest
-          imagePullPolicy: Always 
+          image: ${dockerhub_username}/autoflow-backend:${image_tag}
+          imagePullPolicy: Always
           resources:
             requests:
               memory: "512Mi"

@@ -14,8 +14,15 @@ terraform {
 
 
 provider "aws" {
-  region = var.region_default
+  region              = var.region_default
+  allowed_account_ids = var.aws_allowed_account_ids
 
+}
+
+variable "aws_allowed_account_ids" {
+  description = "Contas permitidas; o pipeline fornece obrigatoriamente a conta esperada."
+  type        = list(string)
+  default     = null
 }
 
 provider "kubectl" {

@@ -1,7 +1,7 @@
 package com.autoflow.config.security.service;
 
-import com.autoflow.domain.usuario.RoleEnum;
 import com.autoflow.application.policy.ClienteAtivoPolicy;
+import com.autoflow.domain.usuario.RoleEnum;
 import com.autoflow.infrastructure.persistence.entity.usuario.UsuarioEntity;
 import com.autoflow.infrastructure.persistence.repository.UsuarioRepository;
 import com.autoflow.infrastructure.security.service.CustomUserDetailsService;
@@ -19,8 +19,6 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyString;
 
 @ExtendWith(MockitoExtension.class)
 class CustomUserDetailsServiceTest {
@@ -48,7 +46,7 @@ class CustomUserDetailsServiceTest {
     }
 
     @Test
-    void deveCarregarUsuarioPorEmail() {
+    void deveCarregarUsuarioPorCpfCnpjParaLoginInterno() {
 
         when(usuarioRepository.findByCpfCnpj("12345678980"))
                 .thenReturn(Optional.of(usuario));
@@ -90,7 +88,7 @@ class CustomUserDetailsServiceTest {
         when(usuarioRepository.findByCpfCnpj(usuario.getCpfCnpj())).thenReturn(Optional.of(usuario));
         when(clienteAtivoPolicy.podeAutenticar(usuario.getCpfCnpj(), true)).thenReturn(true);
 
-        UserDetails resultado = customUserDetailsService.loadUserByUsername(usuario.getCpfCnpj());
+        UserDetails resultado = customUserDetailsService.loadUserByCpfCnpj(usuario.getCpfCnpj());
 
         assertTrue(resultado.isEnabled());
     }
@@ -103,7 +101,7 @@ class CustomUserDetailsServiceTest {
         when(usuarioRepository.findByCpfCnpj(usuario.getCpfCnpj())).thenReturn(Optional.of(usuario));
         when(clienteAtivoPolicy.podeAutenticar(usuario.getCpfCnpj(), true)).thenReturn(false);
 
-        UserDetails resultado = customUserDetailsService.loadUserByUsername(usuario.getCpfCnpj());
+        UserDetails resultado = customUserDetailsService.loadUserByCpfCnpj(usuario.getCpfCnpj());
 
         assertFalse(resultado.isEnabled());
     }
@@ -118,7 +116,7 @@ class CustomUserDetailsServiceTest {
                 assertThrows(
                         UsernameNotFoundException.class,
                         () -> customUserDetailsService
-                                .loadUserByUsername(
+                                .loadUserByCpfCnpj(
                                         "12345678980"
                                 )
                 );

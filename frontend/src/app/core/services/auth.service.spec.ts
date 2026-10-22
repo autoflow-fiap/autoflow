@@ -3,7 +3,6 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter, Router } from '@angular/router';
 import { AuthService } from './auth.service';
-import { environment } from '../../../environments/environment';
 
 function criarTokenJwt(payload: object): string {
   const encoded = btoa(JSON.stringify(payload))
@@ -59,54 +58,67 @@ describe('AuthService', () => {
     expect(service.getUsuarioLogado()).toBeNull();
   });
 
-  it('login deve chamar POST para /auth/login e armazenar o token recebido', () => {
-    const token = criarTokenJwt({ sub: 'admin@autoflow.com', role: 'ADMIN', iat: 0, exp: 9999999999 });
+  it('login deve chamar o endpoint same-origin do API Gateway com CPF/CNPJ e armazenar o token', () => {
+    const token = criarTokenJwt({ sub: '52998224725', role: 'ADMIN', iat: 0, exp: 9999999999 });
 
-    service.login('admin@autoflow.com', 'senha123').subscribe();
+    service.login('52998224725', 'senha123').subscribe();
 
-    const req = httpTesting.expectOne(`${environment.apiUrl}/auth/login`);
+    const req = httpTesting.expectOne('/auth/login');
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({ email: 'admin@autoflow.com', senha: 'senha123' });
+    expect(req.request.body).toEqual({ cpf_cnpj: '52998224725', senha: 'senha123' });
     req.flush({ token });
 
     expect(service.getToken()).toBe(token);
   });
 
   it('login deve tornar isLoggedIn verdadeiro apos receber token valido', () => {
-    const token = criarTokenJwt({ sub: 'mecanico@autoflow.com', role: 'MECANICO', iat: 0, exp: 9999999999 });
+    const token = criarTokenJwt({ sub: '12345678909', role: 'MECANICO', iat: 0, exp: 9999999999 });
 
-    service.login('mecanico@autoflow.com', 'senha').subscribe();
-    httpTesting.expectOne(`${environment.apiUrl}/auth/login`).flush({ token });
+    service.login('12345678909', 'senha').subscribe();
+    httpTesting.expectOne('/auth/login').flush({ token });
 
     expect(service.isLoggedIn()).toBeTrue();
   });
 
-  it('getUsuarioLogado deve decodificar email e role do token valido', () => {
-    const token = criarTokenJwt({ sub: 'atendente@autoflow.com', role: 'ATENDENTE', iat: 0, exp: 9999999999 });
+  it('loginPorCpf deve chamar a API serverless com CPF/CNPJ e armazenar o token', () => {
+    const token = criarTokenJwt({ sub: '52998224725', role: 'CLIENTE', iat: 0, exp: 9999999999 });
 
-    service.login('atendente@autoflow.com', 'senha').subscribe();
-    httpTesting.expectOne(`${environment.apiUrl}/auth/login`).flush({ token });
+    service.loginPorCpf('529.982.247-25', 'senha').subscribe();
+
+    const req = httpTesting.expectOne('/auth/login');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ cpf_cnpj: '529.982.247-25', senha: 'senha' });
+    req.flush({ token, tokenType: 'Bearer', expiresIn: 3600 });
+
+    expect(service.getToken()).toBe(token);
+  });
+
+  it('getUsuarioLogado deve decodificar CPF/CNPJ e role do token valido', () => {
+    const token = criarTokenJwt({ sub: '16899535009', role: 'ATENDENTE', iat: 0, exp: 9999999999 });
+
+    service.login('16899535009', 'senha').subscribe();
+    httpTesting.expectOne('/auth/login').flush({ token });
 
     const usuario = service.getUsuarioLogado();
-    expect(usuario?.email).toBe('atendente@autoflow.com');
+    expect(usuario?.email).toBe('16899535009');
     expect(usuario?.role).toBe('ATENDENTE');
   });
 
   it('getRole deve retornar o role do token quando logado', () => {
-    const token = criarTokenJwt({ sub: 'admin@autoflow.com', role: 'ADMIN', iat: 0, exp: 9999999999 });
+    const token = criarTokenJwt({ sub: '52998224725', role: 'ADMIN', iat: 0, exp: 9999999999 });
 
-    service.login('admin@autoflow.com', 'senha').subscribe();
-    httpTesting.expectOne(`${environment.apiUrl}/auth/login`).flush({ token });
+    service.login('52998224725', 'senha').subscribe();
+    httpTesting.expectOne('/auth/login').flush({ token });
 
     expect(service.getRole()).toBe('ADMIN');
   });
 
   it('logout deve remover o token e navegar para /login', () => {
-    const token = criarTokenJwt({ sub: 'user@autoflow.com', role: 'CLIENTE', iat: 0, exp: 9999999999 });
+    const token = criarTokenJwt({ sub: '52998224725', role: 'CLIENTE', iat: 0, exp: 9999999999 });
     const navigateSpy = spyOn(router, 'navigate');
 
-    service.login('user@autoflow.com', 'senha').subscribe();
-    httpTesting.expectOne(`${environment.apiUrl}/auth/login`).flush({ token });
+    service.login('52998224725', 'senha').subscribe();
+    httpTesting.expectOne('/auth/login').flush({ token });
 
     service.logout();
 
@@ -116,11 +128,11 @@ describe('AuthService', () => {
   });
 
   it('getUsuarioLogado deve retornar null e chamar logout quando token expirado', () => {
-    const tokenExpirado = criarTokenJwt({ sub: 'user@autoflow.com', role: 'ADMIN', iat: 0, exp: 1 });
+    const tokenExpirado = criarTokenJwt({ sub: '52998224725', role: 'ADMIN', iat: 0, exp: 1 });
     const navigateSpy = spyOn(router, 'navigate');
 
-    service.login('user@autoflow.com', 'senha').subscribe();
-    httpTesting.expectOne(`${environment.apiUrl}/auth/login`).flush({ token: tokenExpirado });
+    service.login('52998224725', 'senha').subscribe();
+    httpTesting.expectOne('/auth/login').flush({ token: tokenExpirado });
 
     const usuario = service.getUsuarioLogado();
     expect(usuario).toBeNull();

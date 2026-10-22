@@ -1,10 +1,9 @@
 package com.autoflow.presentation.usuario.request;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
 public record LoginRequest(
-        @NotBlank(message = "o email é obrigatório") @Email String email,
+        @NotBlank(message = "o CPF/CNPJ é obrigatório") String cpfCnpj,
         @NotBlank(message = "a senha é obrigatória") String senha
 ) {
 }

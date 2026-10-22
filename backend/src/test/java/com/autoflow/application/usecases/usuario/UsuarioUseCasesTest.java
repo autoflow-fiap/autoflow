@@ -45,6 +45,7 @@ class UsuarioUseCasesTest {
         usuario.setId(1L);
         usuario.setNome("Maria");
         usuario.setEmail("maria@autoflow.com");
+        usuario.setCpfCnpj("12345678980");
         usuario.setRole(RoleEnum.MECANICO);
         input = new RegistroInput("Maria", usuario.getEmail(), "12345678980", "11999999999", "senha", RoleEnum.MECANICO);
         output = new UsuarioOutput(1L, "Maria", usuario.getEmail(), "12345678980", RoleEnum.MECANICO);
@@ -166,14 +167,14 @@ class UsuarioUseCasesTest {
 
     @Test
     void deveAutenticarEGerarToken() {
-        var loginInput = new LoginInput(usuario.getEmail(), "senha");
+        var loginInput = new LoginInput(usuario.getCpfCnpj(), "senha");
         var useCase = new LoginUsuarioUseCaseImpl(authenticationGateway, gateway, tokenGateway);
-        when(gateway.findByEmail(usuario.getEmail())).thenReturn(Optional.of(usuario));
-        when(tokenGateway.generateToken(usuario.getEmail(), RoleEnum.MECANICO.name())).thenReturn("token");
+        when(gateway.findByCpfCnpj(usuario.getCpfCnpj())).thenReturn(Optional.of(usuario));
+        when(tokenGateway.generateToken(usuario.getCpfCnpj(), RoleEnum.MECANICO.name())).thenReturn("token");
         assertEquals("token", useCase.execute(loginInput).token());
-        verify(authenticationGateway).authenticate(usuario.getEmail(), "senha");
+        verify(authenticationGateway).authenticate(usuario.getCpfCnpj(), "senha");
 
-        when(gateway.findByEmail(usuario.getEmail())).thenReturn(Optional.empty());
+        when(gateway.findByCpfCnpj(usuario.getCpfCnpj())).thenReturn(Optional.empty());
         assertThrows(java.util.NoSuchElementException.class, () -> useCase.execute(loginInput));
     }
 }

@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: autoflow-backend-container
-          image: brunosousa06/autoflow-backend:latest
+          image: autoflow-backend:latest
           imagePullPolicy: Never 
           resources:
             requests:
@@ -53,4 +53,3 @@ spec:
             periodSeconds: 30
           
         
-          

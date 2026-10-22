@@ -2,24 +2,21 @@ server {
     listen 8080;
     server_name localhost;
 
+    # Default combined logs include the request line (including query tokens).
+    # Disable access logs until a query-redacting format is configured.
+    access_log off;
+
     root /usr/share/nginx/html;
     index index.html;
 
+    # Nunca permitir que APIs sem rota no Kong sejam servidas pela SPA.
+    location = /api {
+        return 404;
+    }
 
-    location /api/ {
-    rewrite ^/api/(.*)$ /$1 break;
-
-    proxy_pass ${BACKEND_URL};
-
-    proxy_http_version 1.1;
-
-    proxy_set_header Host $host; 
-    
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-}
-
+    location ^~ /api/ {
+        return 404;
+    }
 
     location / {
 
@@ -33,8 +30,6 @@ server {
         expires 1y;
 
         add_header Cache-Control "public, immutable";
-
-        access_log off;
 
     }
 

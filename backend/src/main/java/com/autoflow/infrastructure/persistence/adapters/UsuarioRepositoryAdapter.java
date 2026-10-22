@@ -46,6 +46,12 @@ public class UsuarioRepositoryAdapter implements UsuarioGateway {
     }
 
     @Override
+    public Optional<Usuario> findByCpfCnpj(String cpfCnpj) {
+        return usuarioRepository.findByCpfCnpj(cpfCnpj)
+                .map(usuarioPersistenceMapper::toDomain);
+    }
+
+    @Override
     public boolean existsByEmail(String email) {
         return usuarioRepository.existsByEmail(email);
     }

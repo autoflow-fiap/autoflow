@@ -20,14 +20,14 @@ public class LoginUsuarioUseCaseImpl implements LoginUsuarioUseCase {
     @Override
     public LoginOutput execute(LoginInput input) {
 
-        authenticationGateway.authenticate(input.email(), input.senha());
+        authenticationGateway.authenticate(input.cpfCnpj(), input.senha());
 
         Usuario usuario = usuarioGateway
-                .findByEmail(input.email())
+                .findByCpfCnpj(input.cpfCnpj())
                 .orElseThrow();
 
         return new LoginOutput(tokenGateway.generateToken(
-                usuario.getEmail(),
+                usuario.getCpfCnpj(),
                 usuario.getRole().name()
         ));
     }

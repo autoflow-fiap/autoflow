@@ -61,19 +61,9 @@ orçamentos com PDF e aprovação autenticada ou pública; reparos adicionais; n
 
 ---
 
-## Usuários e perfis de demonstração
+## Dados de demonstração
 
-Para a demonstração local da pós-graduação, o seed cria as contas abaixo. Todas usam a senha de exemplo `Senha@1234`:
-
-| E-mail                   | Perfil      |
-|--------------------------|-------------|
-| `admin@autoflow.com`     | `ADMIN`     |
-| `atendente@autoflow.com` | `ATENDENTE` |
-| `mecanico1@autoflow.com` | `MECANICO`  |
-| `mecanico2@autoflow.com` | `MECANICO`  |
-| `cliente@autoflow.com`   | `CLIENTE`   |
-
-São credenciais de demonstração acadêmica/local e não devem ser usadas em produção.
+As migrations de desenvolvimento incluem dados para avaliação local. Consulte a configuração local e as migrations para obter os dados de teste. Não publique CPF/CNPJ ou senhas e não use dados de demonstração em produção.
 
 ---
 
@@ -110,13 +100,17 @@ O backend fica disponível em `http://localhost:8081` e o frontend em `http://lo
 Na raiz do repositório, suba a stack completa com:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 ## Kubernetes local 
 
-Os [manifestos Kubernetes da entrega](k8s/) e o perfil local em [k8s-local/](k8s-local/) estão versionados no
-repositório. É necessário ter Minikube, Kind ou Kubernetes habilitado no Docker Desktop.
+Os manifestos Kubernetes da entrega em [k8s/](k8s/) e do perfil local em [k8s-local/](k8s-local/) estão versionados,
+exceto os arquivos Secret, que são ignorados pelo Git. É necessário ter Minikube, Kind ou Kubernetes habilitado no
+Docker Desktop. Para o perfil local, mantenha `k8s-local/secret.yaml` apenas na máquina e preencha-o com os valores
+locais requeridos pelo PostgreSQL e pela aplicação, sem adicioná-lo ao Git.
+
+Os manifests de `k8s-local/` são para desenvolvimento local. O acesso AWS de homologação usa os serviços NodePort privados alcançáveis somente pelo ALB interno provisionado pelo API Gateway.
 
 ```bash
 cd k8s-local
@@ -124,7 +118,7 @@ minikube start
 kubectl apply -f configmap.yaml
 kubectl apply -f secret.yaml
 kubectl apply -f postgresql-service.yaml
-kubectl apply -f postgresql-stateful.yaml
+kubectl apply -f postgresql-statefulset.yaml
 kubectl apply -f .
 kubectl get pods
 ```
@@ -135,19 +129,60 @@ O frontend fica disponível em `http://localhost:30180` e o backend em `http://l
 
 ## Terraform na AWS
 
-O código está em [infra/](infra/). Com o Terraform e as credenciais da AWS configurados fora do repositório, execute:
-Observação:  apenas a parte de infra referente aos manifestos kubernetes esta neste repositorio, a infraestrutura AWS completa esta no repositorio: https://github.com/BrunoSousa06/autoflow-infra
+O código Terraform de deploy da aplicação está em [infra/](infra/). A plataforma EKS, o API Gateway HTTP, o VPC Link,
+o ALB interno, IAM e os recursos compartilhados pertencem ao repositório
+[autoflow-infra](https://github.com/BrunoSousa06/autoflow-infra). Este repositório gerencia Deployments, Services
+internos/NodePort privados e a configuração Nginx do frontend.
+
+O state do root `infra/` usa a key S3 `application/autoflow/terraform.tfstate`. Configure o bucket e a key aprovados
+por variáveis do ambiente; o workflow confirma que o objeto remoto existe antes do Terraform. O backend exige
+`AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY`, `AWS_RDS_STATE_KEY`, `API_GATEWAY_ORIGIN` e
+`API_GATEWAY_CORS_ORIGINS`. A API de negócio e o frontend são publicados na mesma origem HTTPS do API Gateway; não há
+Ingress, plugin ou upstream Kong na arquitetura de aplicação.
+
+Para a configuração por nome de GitHub Actions, Terraform, runtime e Kubernetes, consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md) e o [histórico](docs/variables-changelog.md). Esta seção descreve a operação do Secret Kubernetes; a documentação operacional do pipeline permanece em [CI-CD-AWS.md](.github/CI-CD-AWS.md).
+
+## Segredos Kubernetes da aplicação
+
+O Secret Kubernetes chama-se `autoflow-secrets`, no namespace `default`, e é consumido somente pelo Deployment
+`autoflow-backend` via `envFrom.secretRef`. O contrato mantém as chaves `SPRING_DATASOURCE_USERNAME`,
+`SPRING_DATASOURCE_PASSWORD`, `JWT_SECRET`, `MAIL_PASSWORD` e `APP_PUBLIC_TOKEN_SECRET`; o Deployment frontend não
+consome esse Secret. Os manifests `k8s/secret.yaml` e `k8s-local/secret.yaml` ficam ignorados pelo Git; não os force
+para o repositório.
+
+Os Secrets `AUTOFLOW_DB_USERNAME`, `AUTOFLOW_DB_PASSWORD`, `AUTOFLOW_JWT_SECRET`, `AUTOFLOW_MAIL_PASSWORD` e
+`AUTOFLOW_PUBLIC_TOKEN_SECRET` são os valores planejados para atualizar o Secret do workload quando o deploy privado
+for habilitado. O workflow atual não os consome: deployment e `kubectl` estão bloqueados porque o runner hospedado não
+tem conectividade autorizada/validada à API Kubernetes do EKS. Não há produção implantada declarada.
+
+Para aplicar localmente em um contexto Kubernetes autorizado, forneça essas cinco variáveis no ambiente do processo
+a partir de um gerenciador seguro (sem incluí-las em comandos registrados ou arquivos versionados) e execute:
 
 ```bash
-cd infra
-terraform init
-terraform plan
-terraform apply
+python scripts/apply_k8s_secret.py
 ```
+
+O script exige valores não vazios e envia um manifesto efêmero diretamente por stdin; não cria arquivo local. Configure
+o RBAC da identidade de deploy com o mínimo necessário: `get`, `create`, `patch` e `update` de Secrets no namespace
+`default`, além das permissões estritamente requeridas pelo Terraform para os demais recursos da aplicação. Acesso de
+leitura a Secrets deve ser restrito a administradores/operadores autorizados, pois identidades com esse acesso podem
+recuperar os valores.
+
+O código local não comprova criptografia em repouso do cluster EKS: o responsável pela plataforma deve confirmar que
+o armazenamento de Secrets usa envelope encryption/KMS e políticas de acesso apropriadas antes de homologar. Terraform
+não cria mais esse Secret e deixa de receber as credenciais de banco. O bloco `removed` preserva o recurso Kubernetes
+existente enquanto o remove do state atual no próximo apply; versões históricas do state ainda podem conter valores
+previamente aplicados. O backend S3 declara `encrypt = true`, mas isso, por si só, não elimina cópias antigas nem
+comprova KMS. Antes de habilitar o gate, o owner deve avaliar o state histórico e restringir seu acesso; valores que
+já foram versionados ou persistidos em state devem ser rotacionados por procedimento operacional aprovado.
 
 ---
 
 ## API e OpenAPI
+
+Para demonstrar o login serverless por CPF/CNPJ e o uso do token em rota protegida, consulte a
+[demonstração ponta a ponta](docs/openapi/README.md#demonstração-ponta-a-ponta-da-autenticação-serverless) e importe a
+[coleção Postman](backend/postman/autoflow-serverless-auth.postman_collection.json).
 
 O [contrato OpenAPI versionado](docs/openapi/autoflow-api.json) é o artefato distribuível da API; a [documentação da
 API](docs/openapi/README.md) detalha seu uso. Com o backend em execução, acesse [`http://localhost:8081/swagger-ui.html`](http://localhost:8081/swagger-ui.html)
@@ -157,8 +192,7 @@ ou [`http://localhost:8081/v3/api-docs`](http://localhost:8081/v3/api-docs).
 
 ## Segurança
 
-O acesso é controlado por JWT e perfis (`ADMIN`, `ATENDENTE`, `MECANICO` e `CLIENTE`), com endpoints públicos e
-privados segregados. Não são mantidas credenciais, tokens ou valores reais de ambiente neste README.
+O acesso às APIs de negócio é controlado por JWT e perfis (`ADMIN`, `ATENDENTE`, `MECANICO` e `CLIENTE`), com endpoints públicos e privados segregados. O frontend envia login ao API Gateway, que invoca a Lambda nativamente; as rotas de negócio seguem pelo VPC Link e ALB interno até o backend no EKS. Não são mantidos credenciais, tokens ou valores reais de ambiente neste README.
 
 ---
 
@@ -168,96 +202,39 @@ Testes automatizados e análises de qualidade e segurança usam JUnit, SonarQube
 
 ## Fluxo do CI/CD
 
-O [pipeline do GitHub Actions](.github/workflows/pipeline.yml) executa testes, análises de qualidade e segurança,
-builds do backend e frontend, criação e publicação de imagens Docker e deploy via Terraform em AWS/EKS.
+O [workflow do GitHub Actions](.github/workflows/pipeline.yml) executa CI em Pull Requests e pushes para `develop` e `main`. Todo push em `develop` publica imagens pelo SHA, executa Terraform Plan e aguarda aprovação humana efetiva no Environment `homolog` antes do Apply, rollout e smoke tests. Plan/Apply usam `ubuntu-latest` com autorização temporária do IP de saída ao endpoint EKS. `workflow_dispatch` continua disponível para reexecução manual. Veja [Operação de CI/CD](.github/CI-CD-AWS.md) para pré-requisitos e ativação.
 
-```text
-                     ┌─────────────────────┐
-                     │     Pull Request    │
-                     │  develop / main     │
-                     └──────────┬──────────┘
-                                │
-                                ▼
-                ┌──────────────────────────────┐
-                │ Backend Tests + SonarQube    │
-                │ - Maven                      │
-                │ - Testcontainers             │
-                │ - JaCoCo                     │
-                │ - SonarQube Quality Gate     │
-                └──────────────┬───────────────┘
-                               │
-              ┌────────────────┴────────────────┐
-              ▼                                 ▼
-    ┌──────────────────┐              ┌──────────────────┐
-    │  Backend Build   │              │ Frontend Tests   │
-    │  mvn package     │              │ npm test         │
-    └────────┬─────────┘              └────────┬─────────┘
-             │                                  │
-             │                                  ▼
-             │                         ┌──────────────────┐
-             │                         │ Frontend Build   │
-             │                         │ npm run build    │
-             │                         └────────┬─────────┘
-             │                                  │
-             └────────────────┬─────────────────┘
-                              │
-                              ▼
-                ┌──────────────────────────────┐
-                │      Push na develop?        │
-                └──────────────┬───────────────┘
-                               │ Sim
-                               ▼
-                ┌──────────────────────────────┐
-                │       Snyk Security Scan     │
-                │ - Open Source dependencies   │
-                │ - Docker image               │
-                └──────────────┬───────────────┘
-                               │
-                               ▼
-                ┌──────────────────────────────┐
-                │      Docker Build & Push     │
-                │                              │
-                │  Backend → Docker Hub        │
-                │  Frontend → Docker Hub       │
-                └──────────────┬───────────────┘
-                               │
-                               ▼
-                ┌──────────────────────────────┐
-                │       Terraform Deploy       │
-                │                              │
-                │  Terraform Init              │
-                │  Terraform Validate          │
-                │  Terraform Plan              │
-                │  Terraform Apply             │
-                └──────────────┬───────────────┘
-                               │
-                               ▼
-                     ┌────────────────────┐
-                     │       AWS          │
-                     │                    │
-                     │                    │
-                     │     Kubernetes     │
-                     └────────────────────┘
+```mermaid
+flowchart TD
+  A[PR ou push em develop/main] --> B[CI: testes, builds, análises e Terraform estático]
+  A --> C{Push em develop?}
+  C -->|Sim| D[Publicação Docker Hub com tags SHA]
+  D --> P[Plan no ubuntu-latest]
+  P --> G{Aprovação do Environment homolog}
+  G -->|Aprovado| T[Apply e rollout]
+  G -->|Rejeitado| X[Deploy interrompido]
+  C -->|Não| F[Sem publicação/deploy]
 ```
 
 ---
 
-## Entrega — Tech Challenge Fase 2  
+## Entrega — Tech Challenge Fase 2 (histórico)
 
 ### Objetivos da Fase 2
 
 Evoluir o AutoFlow com Clean Architecture, testes automatizados, APIs operacionais, infraestrutura como código, CI/CD,
 deploy em Kubernetes e escalabilidade automática.
 
-### Arquitetura de deploy
+### Arquitetura de deploy documentada para a Fase 2
 
-O deploy combina GitHub Actions, Docker Hub, Terraform, ConfigMaps, Secrets e HPA. O HPA do
-backend foi aplicado manualmente em produção para a demonstração, conforme o [manifesto k8s/hpa.yaml](k8s/hpa.yaml).
+O diagrama a seguir é um registro histórico da entrega da Fase 2; não representa os gatilhos e gates atuais do workflow, descritos na seção anterior.
+
+O modelo de deploy descrito para a Fase 2 combina GitHub Actions, Docker Hub, Terraform, ConfigMaps, Secrets e HPA. O manifesto [`k8s/hpa.yaml`](k8s/hpa.yaml) está versionado, mas sua aplicação efetiva em qualquer ambiente não é comprovada pela presença do arquivo.
 
 ```mermaid
 flowchart TD
-    A["Push ou Pull Request<br/>develop / main"] --> B["Testes backend + SonarQube<br/>Maven · Testcontainers · JaCoCo"]
-    A --> C["Testes frontend<br/>npm test"]
+    A["Push ou Pull Request<br/>develop / main"] --> B["Testes do backend + SonarQube<br/>Maven · Testcontainers · JaCoCo"]
+    A --> C["Testes do frontend<br/>npm test"]
 
     B --> D["Build backend<br/>mvn package"]
     C --> E["Build frontend<br/>npm run build"]
@@ -265,11 +242,11 @@ flowchart TD
     A --> F{"Push na branch develop?"}
     F -->|Sim| G["Snyk Security Scan<br/>dependências e imagens"]
 
-    D --> H["Docker Build & Push<br/>Backend e Frontend no Docker Hub"]
+    D --> H["Build e publicação Docker<br/>Backend e frontend no Docker Hub"]
     E --> H
     F -->|Sim| H
 
-    H --> I["Terraform Deploy<br/>init · validate · plan · apply"]
+    H --> I["Deploy Terraform<br/>init · validate · plan · apply"]
     I --> J["AWS / EKS<br/>recursos Kubernetes"]
 ```
 

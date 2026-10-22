@@ -47,13 +47,13 @@ public class JwtFilter extends OncePerRequestFilter {
             String cpfCnpj = jwtService.extrairCpfCnpj(token);
 
             if (cpfCnpj != null) {
-                                UserDetails userDetails;
-                                try {
-                                        userDetails = userDetailsService.loadUserByUsername(cpfCnpj);
-                                } catch (UsernameNotFoundException exception) {
-                                        filterChain.doFilter(request, response);
-                                        return;
-                                }
+                UserDetails userDetails;
+                try {
+                    userDetails = userDetailsService.loadUserByCpfCnpj(cpfCnpj);
+                } catch (UsernameNotFoundException exception) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
 
                 boolean usuarioCliente = userDetails.getAuthorities().stream()
                         .anyMatch(authority -> "ROLE_CLIENTE".equals(authority.getAuthority()));

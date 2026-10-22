@@ -109,6 +109,15 @@ class JwtServiceTest {
     }
 
     @Test
+    void deveRetornarFalseQuandoTokenEstiverExpirado() {
+        ReflectionTestUtils.setField(jwtService, "expiration", -1L);
+
+        String token = jwtService.gerarToken("52998224725", "CLIENTE");
+
+        assertFalse(jwtService.tokenValido(token));
+    }
+
+    @Test
         void deveGerarTokenComCpfCnpjCorreto() {
 
         String token =

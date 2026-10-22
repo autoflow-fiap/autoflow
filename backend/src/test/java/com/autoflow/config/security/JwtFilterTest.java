@@ -115,7 +115,7 @@ class JwtFilterTest {
         when(jwtService.extrairCpfCnpj(token))
                 .thenReturn("12345678980");
 
-        when(userDetailsService.loadUserByUsername("12345678980"))
+        when(userDetailsService.loadUserByCpfCnpj("12345678980"))
                 .thenReturn(userDetails);
 
         assertDoesNotThrow(this::executarFiltro);
@@ -141,7 +141,7 @@ class JwtFilterTest {
                 .tokenValido(token);
 
         verify(userDetailsService)
-                .loadUserByUsername("12345678980");
+                .loadUserByCpfCnpj("12345678980");
 
         assertDoesNotThrow(this::verificarFiltroContinuou);
     }
@@ -182,12 +182,12 @@ class JwtFilterTest {
                 request.addHeader("Authorization", "Bearer " + token);
                 when(jwtService.tokenValido(token)).thenReturn(true);
                 when(jwtService.extrairCpfCnpj(token)).thenReturn(subjectEmailLegado);
-                when(userDetailsService.loadUserByUsername(subjectEmailLegado))
+                when(userDetailsService.loadUserByCpfCnpj(subjectEmailLegado))
                                 .thenThrow(new UsernameNotFoundException("Usuário não encontrado"));
 
                 assertDoesNotThrow(this::executarFiltro);
                 assertNull(SecurityContextHolder.getContext().getAuthentication());
-                verify(userDetailsService).loadUserByUsername(subjectEmailLegado);
+                verify(userDetailsService).loadUserByCpfCnpj(subjectEmailLegado);
                 assertDoesNotThrow(this::verificarFiltroContinuou);
         }
 
@@ -262,7 +262,7 @@ class JwtFilterTest {
         );
 
         when(jwtService.extrairCpfCnpj(token)).thenReturn("12345678980");
-        when(userDetailsService.loadUserByUsername("12345678980"))
+        when(userDetailsService.loadUserByCpfCnpj("12345678980"))
                 .thenReturn(usuarioComRoleAtualizada);
         when(jwtService.tokenValido(token)).thenReturn(true);
 
@@ -289,7 +289,7 @@ class JwtFilterTest {
                 .build();
         when(jwtService.tokenValido(token)).thenReturn(true);
         when(jwtService.extrairCpfCnpj(token)).thenReturn("12345678980");
-        when(userDetailsService.loadUserByUsername("12345678980")).thenReturn(cliente);
+        when(userDetailsService.loadUserByCpfCnpj("12345678980")).thenReturn(cliente);
         when(clienteAtivoPolicy.podeAutenticar("12345678980", true)).thenReturn(false);
 
         executarFiltro();

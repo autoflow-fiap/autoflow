@@ -24,10 +24,18 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String cpfCnpj)
             throws UsernameNotFoundException {
+        return loadUserByCpfCnpj(cpfCnpj);
+    }
 
-        UsuarioEntity usuarioEntity = usuarioRepository.findByCpfCnpj(cpfCnpj)
+    public UserDetails loadUserByCpfCnpj(String cpfCnpj)
+            throws UsernameNotFoundException {
+
+        return toUserDetails(usuarioRepository.findByCpfCnpj(cpfCnpj)
                 .orElseThrow(() ->
-                        new UsernameNotFoundException("Usuário não encontrado"));
+                        new UsernameNotFoundException("Usuário não encontrado")));
+    }
+
+    private UserDetails toUserDetails(UsuarioEntity usuarioEntity) {
 
         boolean clienteAtivo = clienteAtivoPolicy.podeAutenticar(
                 usuarioEntity.getCpfCnpj(),

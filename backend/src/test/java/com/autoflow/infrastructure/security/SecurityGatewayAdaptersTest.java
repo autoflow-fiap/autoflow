@@ -43,19 +43,19 @@ class SecurityGatewayAdaptersTest {
     void deveDelegarAutenticacaoAoAuthenticationManager() {
         AuthenticationGatewayAdapter adapter = new AuthenticationGatewayAdapter(authenticationManager);
 
-        adapter.authenticate("user@email.com", "senha");
+        adapter.authenticate("52998224725", "senha");
 
         verify(authenticationManager).authenticate(any(UsernamePasswordAuthenticationToken.class));
     }
 
     @Test
-    void deveDelegarGeracaoDeTokenAoJwtService() {
-        when(jwtService.gerarToken("user@email.com", "CLIENTE")).thenReturn("token");
+    void deveDelegarGeracaoDeTokenAoJwtServiceComSubjectCpfCnpj() {
+        when(jwtService.gerarToken("12345678980", "CLIENTE")).thenReturn("token");
         TokenGatewayAdapter adapter = new TokenGatewayAdapter(jwtService);
 
-        assertEquals("token", adapter.generateToken("user@email.com", "CLIENTE"));
+        assertEquals("token", adapter.generateToken("12345678980", "CLIENTE"));
 
-        verify(jwtService).gerarToken("user@email.com", "CLIENTE");
+        verify(jwtService).gerarToken("12345678980", "CLIENTE");
     }
 
     @Test
