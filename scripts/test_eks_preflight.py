@@ -155,6 +155,44 @@ class PreflightTests(unittest.TestCase):
         self.assertNotIn("pull_request", publish)
         self.assertNotIn(":latest", content)
 
+    def test_feature_branches_run_validation_and_local_docker_build_only(self):
+        from pathlib import Path
+        workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
+        content = workflow.read_text(encoding="utf-8")
+        docker_build = content.split("  docker-build:", 1)[1].split("  snyk-scan:", 1)[0]
+        publish = content.split("  docker-publish:", 1)[1].split("  deploy-plan:", 1)[0]
+        plan = content.split("  deploy-plan:", 1)[1].split("  deploy-apply:", 1)[0]
+        apply = content.split("  deploy-apply:", 1)[1].split("  smoke-tests:", 1)[0]
+        smoke = content.split("  smoke-tests:", 1)[1]
+
+        self.assertIn("branches: [develop, main, 'feature/**']", content)
+        self.assertIn("github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feature/')", docker_build)
+        self.assertIn("github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/feature/')", docker_build)
+        self.assertIn("needs: [backend-build, frontend-build, terraform-static]", docker_build)
+        self.assertIn("docker build --file backend/Dockerfile", docker_build)
+        self.assertIn("docker build --file frontend/Dockerfile", docker_build)
+        self.assertNotIn("docker/login-action", docker_build)
+        self.assertNotIn("build-push-action", docker_build)
+        self.assertNotIn("secrets.", docker_build)
+
+        for privileged_job in (publish, plan, apply):
+            self.assertNotIn("feature/", privileged_job)
+        self.assertIn("github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'", plan)
+        self.assertIn("github.ref == 'refs/heads/develop'", apply)
+        self.assertNotIn("github.ref == 'refs/heads/feature/'", smoke)
+        self.assertIn("inputs.smoke_tests_only && github.ref == 'refs/heads/develop'", smoke)
+        self.assertNotIn("smoke_api_gateway.py", docker_build)
+
+    def test_feature_terraform_validation_is_offline_and_does_not_read_remote_state(self):
+        from pathlib import Path
+        workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
+        content = workflow.read_text(encoding="utf-8")
+        static = content.split("  terraform-static:", 1)[1].split("  docker-build:", 1)[0]
+        self.assertIn("terraform init -backend=false -input=false", static)
+        self.assertIn("terraform validate", static)
+        self.assertNotIn("AWS_ACCESS_KEY_ID", static)
+        self.assertNotIn("terraform plan", static)
+
     def test_snyk_failures_are_non_blocking_and_uploaded_as_alerts(self):
         from pathlib import Path
         workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"

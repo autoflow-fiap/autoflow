@@ -78,7 +78,7 @@ class EndpointTests(unittest.TestCase):
         from pathlib import Path
         workflow = Path(__file__).parents[1] / ".github/workflows/pipeline.yml"
         text = workflow.read_text(encoding="utf-8")
-        self.assertIn("group: autoflow-application-develop", text)
+        self.assertIn("group: autoflow-application-${{ github.ref }}", text)
         self.assertIn("cancel-in-progress: false", text)
         self.assertNotIn("self-hosted", text)
         self.assertIn("workflow_dispatch", text)
