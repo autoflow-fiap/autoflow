@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Set;
 
@@ -85,7 +86,9 @@ public class NewRelicBusinessTelemetry {
 
     private void recordStage(String stage, LocalDateTime started, LocalDateTime completed) {
         if (started == null || completed == null || completed.isBefore(started)) return;
-        long durationSeconds = Duration.between(started, completed).getSeconds();
+        // OS timestamps são gravados sem fuso, mas gerados a partir do Clock UTC da aplicação.
+        long durationSeconds = Duration.between(
+                started.toInstant(ZoneOffset.UTC), completed.toInstant(ZoneOffset.UTC)).getSeconds();
         emit("AutoFlowOrderStageCompleted", Map.of(
                 "environment", environment,
                 "stage", stage,
