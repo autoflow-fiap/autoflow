@@ -36,15 +36,17 @@ spec:
                 name: autoflow-secrets
           env:
             - name: NEW_RELIC_REQUIRED
-              value: "true"
+              value: "${newrelic_apm_required}"
+%{ if newrelic_apm_required ~}
             - name: NEW_RELIC_LICENSE_KEY
               valueFrom:
                 secretKeyRef:
                   name: newrelic-license
                   key: licenseKey
                   optional: true
+%{ endif ~}
             - name: NEW_RELIC_APP_NAME
-              value: autoflow-backend
+              value: "autoflow-backend"
             - name: NEW_RELIC_DISTRIBUTED_TRACING_ENABLED
               value: "true"
             - name: NEW_RELIC_APPLICATION_LOGGING_ENABLED

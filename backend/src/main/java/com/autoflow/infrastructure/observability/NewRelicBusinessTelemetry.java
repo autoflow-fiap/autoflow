@@ -24,10 +24,13 @@ public class NewRelicBusinessTelemetry {
             "FinalizarServicoUseCaseImpl", "EntregarOrdemServicoUseCaseImpl",
             "IniciarDiagnosticoUseCaseImpl", "IniciarServicoUseCaseImpl");
     private final String environment;
+    private final String serviceName;
 
     public NewRelicBusinessTelemetry(
-            @Value("${app.observability.environment:local}") String environment) {
+            @Value("${app.observability.environment}") String environment,
+            @Value("${spring.application.name}") String serviceName) {
         this.environment = environment;
+        this.serviceName = serviceName;
     }
 
     public void recordSuccessfulUseCase(String operation, Object result) {
@@ -35,7 +38,7 @@ public class NewRelicBusinessTelemetry {
             OrdemServico os = created.ordemServico();
             emit("AutoFlowOrderCreated", Map.of(
                     "environment", environment,
-                    "service", "autoflow-backend",
+                    "service", serviceName,
                     "createdAt", os.getDataAbertura().toString()));
             return;
         }

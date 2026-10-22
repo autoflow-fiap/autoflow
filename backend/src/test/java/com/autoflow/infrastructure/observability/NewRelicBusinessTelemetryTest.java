@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doThrow;
 
 class NewRelicBusinessTelemetryTest {
-    private final NewRelicBusinessTelemetry telemetry = new NewRelicBusinessTelemetry("test");
+    private final NewRelicBusinessTelemetry telemetry = new NewRelicBusinessTelemetry("test", "test-service");
 
     @Test
     void emitsCreationAfterSuccessfulUseCaseWithoutOrderIdentifiers() {
@@ -40,7 +40,11 @@ class NewRelicBusinessTelemetryTest {
             telemetry.recordSuccessfulUseCase("CriarOrdemServicoUseCaseImpl",
                     new OrdemServicoCriadaOutput(order, "synthetic-token"));
 
-            verify(insights).recordCustomEvent(eq("AutoFlowOrderCreated"), anyMap());
+            ArgumentCaptor<Map> attributes = ArgumentCaptor.forClass(Map.class);
+            verify(insights).recordCustomEvent(eq("AutoFlowOrderCreated"), attributes.capture());
+            assertThat(attributes.getValue())
+                    .containsEntry("environment", "test")
+                    .containsEntry("service", "test-service");
         }
     }
 

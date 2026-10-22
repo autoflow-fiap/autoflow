@@ -85,7 +85,9 @@ class PreflightTests(unittest.TestCase):
         plan = content.split("  deploy-plan:", 1)[1].split("  deploy-apply:", 1)[0]
         apply = content.split("  deploy-apply:", 1)[1].split("  smoke-tests:", 1)[0]
         self.assertIn("runs-on: ubuntu-latest", plan)
-        self.assertNotIn("environment:", plan)
+        selected_environment = "environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}"
+        self.assertIn(selected_environment, plan)
+        self.assertIn(selected_environment, apply)
         self.assertIn("github.event_name == 'push'", plan)
         self.assertIn("EKS_LEASE_KEY: ci/eks-endpoint-lease.json", plan)
         self.assertIn("eks_endpoint_access.py authorize", plan)
@@ -107,7 +109,7 @@ class PreflightTests(unittest.TestCase):
         self.assertIn("openssl enc -aes-256-cbc", plan)
         self.assertIn("plan_sha256", plan)
         self.assertIn("runs-on: ubuntu-latest", apply)
-        self.assertIn("environment: homolog", apply)
+        self.assertIn("GITHUB_DEPLOYMENT_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}", apply)
         self.assertIn("select(.type == \"required_reviewers\")", apply)
         self.assertIn("github.event_name == 'push'", apply)
         self.assertIn("actions/download-artifact@v4", apply)

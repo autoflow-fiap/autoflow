@@ -1,6 +1,6 @@
 <configuration>
-    <springProperty scope="context" name="serviceName" source="spring.application.name" defaultValue="autoflow-backend"/>
-    <springProperty scope="context" name="deploymentEnvironment" source="app.observability.environment" defaultValue="local"/>
+    <springProperty scope="context" name="serviceName" source="spring.application.name"/>
+    <springProperty scope="context" name="deploymentEnvironment" source="app.observability.environment"/>
 
     <appender name="STDOUT_JSON" class="ch.qos.logback.core.ConsoleAppender">
         <target>System.out</target>

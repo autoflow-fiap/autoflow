@@ -28,7 +28,7 @@ COPY --from=build --chown=autoflowuser:appgroup \
     /opt/newrelic/newrelic.jar
 COPY --chown=autoflowuser:appgroup newrelic.yml /opt/newrelic/newrelic.yml
 COPY --chown=autoflowuser:appgroup docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod 0555 /usr/local/bin/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh && chmod 0555 /usr/local/bin/docker-entrypoint.sh
 
 USER autoflowuser
 
