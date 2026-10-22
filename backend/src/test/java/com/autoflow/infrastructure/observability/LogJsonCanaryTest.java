@@ -21,6 +21,13 @@ class LogJsonCanaryTest {
     private static final String QUERY_TOKEN = "synthetic-query-token";
 
     @Test
+    void throwableConverterOmitsFieldWhenEventHasNoException() {
+        LoggingEvent event = new LoggingEvent();
+
+        assertThat(new SafeThrowableConverter().convert(event)).isNull();
+    }
+
+    @Test
     void emitsValidJsonAndExcludesSensitiveMdcAndExceptionCanaries() throws Exception {
         LoggerContext context = new LoggerContext();
         LogstashEncoder encoder = new LogstashEncoder();

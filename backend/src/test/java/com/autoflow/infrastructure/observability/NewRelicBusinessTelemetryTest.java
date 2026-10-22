@@ -1,6 +1,8 @@
 package com.autoflow.infrastructure.observability;
 
 import com.autoflow.application.output.ordemservico.OrdemServicoCriadaOutput;
+import com.autoflow.application.output.ordemservico.FinalizarDiagnosticoOutput;
+import com.autoflow.domain.ordemservico.Diagnostico;
 import com.autoflow.domain.ordemservico.OrdemServico;
 import com.autoflow.domain.ordemservico.StatusOrdemServico;
 import com.newrelic.api.agent.NewRelic;
@@ -83,6 +85,8 @@ class NewRelicBusinessTelemetryTest {
         }
         assertThat(attributes.getValue()).containsEntry("stage", "FINALIZACAO")
                 .containsEntry("durationSeconds", 90L)
+                // completedAt continua no formato local persistido (UTC sem indicador de fuso).
+                .containsEntry("completedAt", "2026-01-01T10:01:30")
                 .doesNotContainKeys("id", "numeroOs", "orderId");
     }
 
@@ -99,6 +103,88 @@ class NewRelicBusinessTelemetryTest {
             telemetry.recordSuccessfulUseCase("CriarOrdemServicoUseCaseImpl",
                     new OrdemServicoCriadaOutput(newOrder(), "not-logged-token"));
         }
+    }
+
+    @Test
+    void ignoresUnsupportedResultsAndIncompleteOrReversedDiagnosticTimestamps() {
+        OrdemServico withoutDiagnosis = new OrdemServico();
+        OrdemServico withIncompleteDiagnosis = new OrdemServico();
+        withIncompleteDiagnosis.setDiagnostico(new Diagnostico());
+        OrdemServico withReversedDiagnosis = new OrdemServico();
+        Diagnostico reversed = new Diagnostico();
+        reversed.setIniciadoEm(LocalDateTime.parse("2026-01-01T10:00:00"));
+        reversed.setConcluidoEm(LocalDateTime.parse("2026-01-01T09:00:00"));
+        withReversedDiagnosis.setDiagnostico(reversed);
+
+        try (MockedStatic<NewRelic> newRelic = mockStatic(NewRelic.class)) {
+            telemetry.recordSuccessfulUseCase("unknown", new Object());
+            telemetry.recordSuccessfulUseCase("FinalizarDiagnosticoUseCaseImpl", withoutDiagnosis);
+            telemetry.recordSuccessfulUseCase("FinalizarDiagnosticoUseCaseImpl", withIncompleteDiagnosis);
+            telemetry.recordSuccessfulUseCase("FinalizarDiagnosticoUseCaseImpl", withReversedDiagnosis);
+            telemetry.recordSuccessfulUseCase("unknown", new FinalizarDiagnosticoOutput(null, null, null));
+            newRelic.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    void recordsSuccessfulDiagnosticDurationAndFailureEventsWithSafeAttributes() {
+        LocalDateTime started = LocalDateTime.parse("2026-01-01T10:00:00");
+        Diagnostico diagnostico = new Diagnostico();
+        diagnostico.setIniciadoEm(started);
+        diagnostico.setConcluidoEm(started.plusSeconds(45));
+        OrdemServico order = new OrdemServico();
+        order.setDiagnostico(diagnostico);
+        Agent agent = mock(Agent.class);
+        Insights insights = mock(Insights.class);
+        when(agent.getInsights()).thenReturn(insights);
+
+        try (MockedStatic<NewRelic> newRelic = mockStatic(NewRelic.class)) {
+            newRelic.when(NewRelic::getAgent).thenReturn(agent);
+            telemetry.recordSuccessfulUseCase("FinalizarDiagnosticoUseCaseImpl", order);
+            telemetry.recordIntegrationFailure("email", "send", new IllegalStateException("private details"));
+            telemetry.recordIntegrationFailure("email", "send", null);
+            telemetry.recordOrderProcessingFailure("not-an-order-operation", new RuntimeException());
+            telemetry.recordOrderProcessingFailure("IniciarServicoUseCaseImpl", null);
+        }
+
+        ArgumentCaptor<Map> attributes = ArgumentCaptor.forClass(Map.class);
+        verify(insights).recordCustomEvent(eq("AutoFlowOrderStageCompleted"), attributes.capture());
+        assertThat(attributes.getValue()).containsEntry("stage", "DIAGNOSTICO")
+                .containsEntry("durationSeconds", 45L);
+        verify(insights, org.mockito.Mockito.times(2))
+                .recordCustomEvent(eq("AutoFlowIntegrationFailure"), attributes.capture());
+        assertThat(attributes.getAllValues().get(1)).containsEntry("failureType", "IllegalStateException")
+                .doesNotContainValue("private details");
+        assertThat(attributes.getAllValues().get(2)).containsEntry("failureType", "UnknownFailure");
+        verify(insights).recordCustomEvent(eq("AutoFlowOrderProcessingFailure"), attributes.capture());
+        assertThat(attributes.getAllValues().get(3)).containsEntry("operation", "START_EXECUTION")
+                .containsEntry("failureType", "UnknownFailure");
+    }
+
+    @Test
+    void mapsEverySupportedOrderFailureToItsStableOperationName() {
+        Agent agent = mock(Agent.class);
+        Insights insights = mock(Insights.class);
+        when(agent.getInsights()).thenReturn(insights);
+        Map<String, String> operationNames = Map.of(
+                "CriarOrdemServicoUseCaseImpl", "CREATE_ORDER",
+                "FinalizarDiagnosticoUseCaseImpl", "COMPLETE_DIAGNOSIS",
+                "FinalizarServicoUseCaseImpl", "COMPLETE_EXECUTION",
+                "EntregarOrdemServicoUseCaseImpl", "DELIVER_ORDER",
+                "IniciarDiagnosticoUseCaseImpl", "START_DIAGNOSIS",
+                "IniciarServicoUseCaseImpl", "START_EXECUTION");
+
+        try (MockedStatic<NewRelic> newRelic = mockStatic(NewRelic.class)) {
+            newRelic.when(NewRelic::getAgent).thenReturn(agent);
+            operationNames.keySet().forEach(operation ->
+                    telemetry.recordOrderProcessingFailure(operation, new IllegalStateException()));
+        }
+
+        ArgumentCaptor<Map> attributes = ArgumentCaptor.forClass(Map.class);
+        verify(insights, org.mockito.Mockito.times(operationNames.size()))
+                .recordCustomEvent(eq("AutoFlowOrderProcessingFailure"), attributes.capture());
+        assertThat(attributes.getAllValues()).extracting(event -> event.get("operation"))
+                .containsExactlyInAnyOrderElementsOf(operationNames.values());
     }
 
     private OrdemServico newOrder() {

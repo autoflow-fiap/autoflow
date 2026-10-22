@@ -78,4 +78,34 @@ class RequestCorrelationFilterTest {
             newRelic.verify(NewRelic::ignoreTransaction);
         }
     }
+
+    @Test
+    void healthProbeStillRunsWhenApmIgnoreFailsAndExactHealthPathIsIgnored() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/actuator/health");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        try (MockedStatic<NewRelic> newRelic = mockStatic(NewRelic.class)) {
+            newRelic.when(NewRelic::ignoreTransaction).thenThrow(new IllegalStateException("vendor detail"));
+
+            filter.doFilter(request, response, chain);
+
+            newRelic.verify(NewRelic::ignoreTransaction);
+            verify(chain).doFilter(request, response);
+            assertThat(response.getHeader("X-Request-ID")).isNotBlank();
+            assertThat(MDC.get("request.id")).isNull();
+        }
+    }
+
+    @Test
+    void doesNotIgnoreNonHealthActuatorRoutes() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/actuator/info");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        try (MockedStatic<NewRelic> newRelic = mockStatic(NewRelic.class)) {
+            filter.doFilter(request, response, chain);
+            newRelic.verifyNoInteractions();
+        }
+    }
 }
