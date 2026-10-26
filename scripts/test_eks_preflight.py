@@ -139,6 +139,24 @@ class PreflightTests(unittest.TestCase):
         self.assertIn("terraform_plan_metadata.py", plan)
         self.assertIn("terraform_plan_metadata.py", apply)
 
+    def test_newrelic_fingerprint_is_generated_uploaded_and_verified_by_apply(self):
+        from pathlib import Path
+        workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
+        content = workflow.read_text(encoding="utf-8")
+        plan = content.split("  deploy-plan:", 1)[1].split("  deploy-apply:", 1)[0]
+        apply = content.split("  deploy-apply:", 1)[1].split("  smoke-tests:", 1)[0]
+        package = plan.split("- name: Criptografar plan e calcular hashes de integridade", 1)[1].split("- name:", 1)[0]
+        upload = plan.split("- name: Armazenar artifact criptografado com retenção mínima", 1)[1].split("- name:", 1)[0]
+        download = apply.split("- name: Baixar artifact de plan desta execução", 1)[1].split("- name:", 1)[0]
+        verify = apply.split("- name: Confirmar configuração New Relic idêntica à do plan", 1)[1].split("- name:", 1)[0]
+
+        self.assertLess(plan.index('fingerprint "$RUNNER_TEMP/newrelic-inputs.sha256"'), plan.index("- name: Criptografar plan e calcular hashes de integridade"))
+        self.assertIn('cp "$RUNNER_TEMP/newrelic-inputs.sha256" "$RUNNER_TEMP/autoflow-plan/newrelic-inputs.sha256"', package)
+        self.assertIn("newrelic-inputs.sha256", upload)
+        self.assertIn("path: ${{ runner.temp }}/autoflow-plan", download)
+        self.assertIn('sha256sum --check --status', verify)
+        self.assertIn('verify-fingerprint "$RUNNER_TEMP/autoflow-plan/newrelic-inputs.sha256"', verify)
+
     def test_images_are_published_only_from_develop_push_with_commit_sha(self):
         from pathlib import Path
         workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
