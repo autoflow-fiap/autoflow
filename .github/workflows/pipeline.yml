@@ -346,6 +346,7 @@ jobs:
           path: |
             ${{ runner.temp }}/autoflow-plan/infra.tfplan.enc
             ${{ runner.temp }}/autoflow-plan/plan-metadata.json
+            ${{ runner.temp }}/autoflow-plan/newrelic-inputs.sha256
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
