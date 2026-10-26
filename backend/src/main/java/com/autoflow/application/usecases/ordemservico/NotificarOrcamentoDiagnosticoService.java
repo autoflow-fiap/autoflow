@@ -24,8 +24,7 @@ public class NotificarOrcamentoDiagnosticoService {
                     orcamento.getId(), orcamento.getTipo(), orcamento.getNumeroOs(),
                     cliente.getNome(), cliente.getEmail(), publicacao.urlPdf(), publicacao.urlDecisao()));
         } catch (Exception exception) {
-            log.error("Falha ao notificar cliente sobre orçamento da OS {}. orcamentoId={}",
-                    orcamento.getNumeroOs(), orcamento.getId(), exception);
+            log.error("Falha ao notificar cliente sobre orçamento da ordem de serviço", exception);
         }
     }
 }

@@ -1,8 +1,9 @@
 resource "kubectl_manifest" "backend_deployment" {
   yaml_body = templatefile("${path.module}/../k8s/backend-deployment.yaml", {
-    dockerhub_username  = var.dockerhub_username
-    image_tag           = var.backend_image_tag
-    gateway_origin_hash = sha256(jsonencode(local.gateway_config))
+    dockerhub_username    = var.dockerhub_username
+    image_tag             = var.backend_image_tag
+    gateway_origin_hash   = sha256(jsonencode(local.gateway_config))
+    newrelic_apm_required = var.enable_newrelic_apm
   })
   depends_on = [kubectl_manifest.autoflow_config]
 }
