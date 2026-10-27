@@ -135,8 +135,6 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
-      - name: Testar normalização segura de relatórios SARIF
-        run: python -m unittest discover -s scripts -p "test_sanitize_snyk_sarif.py" -v
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -148,9 +146,6 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: snyk test --sarif-file-output=snyk-open-source.sarif
-      - name: Normalizar SARIF Snyk Open Source
-        if: always() && hashFiles('snyk-open-source.sarif') != ''
-        run: python scripts/sanitize_snyk_sarif.py snyk-open-source.sarif
       - name: Publicar alertas Snyk Open Source
         if: always() && hashFiles('snyk-open-source.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
@@ -164,9 +159,6 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: snyk container test autoflow-backend:${{ github.sha }} --file=backend/Dockerfile --sarif-file-output=snyk-container.sarif
-      - name: Normalizar SARIF Snyk Container
-        if: always() && hashFiles('snyk-container.sarif') != ''
-        run: python scripts/sanitize_snyk_sarif.py snyk-container.sarif
       - name: Publicar alertas Snyk Container
         if: always() && hashFiles('snyk-container.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
