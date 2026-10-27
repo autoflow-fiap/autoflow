@@ -6,6 +6,8 @@ Catálogo observado no código e configuração deste repositório. Push em `dev
 
 Os jobs de PR não publicam imagens. Push em `develop` e `main` requer acesso ao Docker Hub para publicar tags SHA. `SONAR_TOKEN` e `SNYK_TOKEN` são usados pelos scans. Plan e Apply usam GitHub-hosted runners e o mesmo Environment de destino. Os reviewers efetivos protegem Apply; produção só aplica por dispatch manual. As configurações por environment prevalecem para o respectivo job.
 
+Após reset do Learner Lab, não recadastre `EKS_CLUSTER_NAME` nem `API_GATEWAY_ORIGIN`: o workflow valida conta/região e consulta o cluster e a HTTP API do ambiente. Mantenha bucket/key dos states, `AWS_REGION`, `AWS_EXPECTED_ACCOUNT_ID`, credenciais temporárias, secrets de aplicação, Docker Hub, chave de criptografia, configuração CORS e a proteção de aprovação conforme as tabelas abaixo.
+
 ### Secrets
 
 | Nome | Tipo / finalidade | Onde configurar; origem | CI / CD | Exemplo seguro | Consumidor; default/ausência |
@@ -31,8 +33,7 @@ Os jobs de PR não publicam imagens. Push em `develop` e `main` requer acesso ao
 | `AWS_EXPECTED_ACCOUNT_ID` | Variable; conta permitida pelo guard | Repository Variable; ID da conta alvo | CD | `123456789012` | Workflow/script guard; obrigatória, sem default. |
 | `AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY` | Variables; bucket S3 e state da aplicação | Repository Variables; bucket/key existentes | CD | `autoflow-tfstate-homolog-exemplo`, `application/autoflow/terraform.tfstate` | Workflow/Terraform; obrigatórias, sem defaults. |
 | `DOCKERHUB_USERNAME` | Variable; namespace Docker Hub | GitHub Repository variable | Push `develop` | `usuario-exemplo` | Namespace das imagens; sem default. Tags são sempre `${{ github.sha }}`. |
-| `API_GATEWAY_ORIGIN`, `API_GATEWAY_CORS_ORIGINS` | Variables; origem e CORS do gateway | Repository Variables; URL e lista JSON exatas | CD | `https://api.example.invalid`, `[]` | Workflow/Terraform; obrigatórias; CORS deve ser array JSON. |
-| `EKS_CLUSTER_NAME` | Variable; nome do cluster | Repository Variable; nome real | CD | `eks-autoflow` | Workflow; deve corresponder ao cluster implantado. |
+| `API_GATEWAY_CORS_ORIGINS` | Variable; allowlist CORS | Repository Variable; lista JSON exata | CD | `[]` | Workflow/Terraform; obrigatório; deve ser array JSON. O endpoint público é descoberto pela HTTP API do ambiente após validar conta e região AWS. |
 | `TERRAFORM_APPLY_APPROVAL_CONFIGURED` | Variable; guard suplementar de aprovação | Repository Variable; `true` somente após configurar Required reviewers no Environment `homolog` | CD | `true` | Workflow; ausente/diferente bloqueia Apply. Não substitui a proteção do Environment. |
 | `ENABLE_NEWRELIC_APM` | Variable booleana que ativa o agente Java | GitHub Variable do Environment `homolog` da aplicação | Plan/Apply | `true` | Obrigatória; `homolog` só aceita `true`, e a falta da licença bloqueia o Apply/startup. Não é input de `workflow_dispatch`. |
 | `NEW_RELIC_LICENSE_SECRET_ID` | Variable; identificador do Secret no AWS Secrets Manager | GitHub Variable do Environment `homolog` em `autoflow` | Apply aprovado em homolog | Não aplicável | Obrigatória quando `ENABLE_NEWRELIC_APM=true`; o script usa o AWS SDK e nunca passa a licença em argumentos. |
@@ -61,7 +62,7 @@ O valor inicial da License Key é cadastrado uma única vez no GitHub Actions En
 
 O `nri-bundle` e a aplicação usam por default o namespace `default`; o sincronizador cria/verifica `Secret/newrelic-license`, chave `licenseKey`, nesse mesmo namespace. Secrets Kubernetes não são compartilhados entre namespaces. A sessão AWS existente precisa de `secretsmanager:GetSecretValue` e, apenas quando ausente, `secretsmanager:CreateSecret` no secret configurado, além de permissões EKS/Kubernetes para criar/atualizar e ler Secrets em `default`. Falhas de autorização são sanitizadas. Não há dependência de ESO ou IRSA.
 
-`autoflow-infra` usa duas GitHub Variables opcionais por Environment: `ENABLE_NEWRELIC_KUBERNETES` e `ENABLE_NEWRELIC_ACCOUNT_RESOURCES` (ausentes equivalem a `false`). São ativáveis separadamente e não exigem flags no dispatch. Os recursos de conta exigem `NEW_RELIC_ACCOUNT_ID`, `NEW_RELIC_REGION` e o Secret `NEW_RELIC_API_KEY`; Synthetic aceita `NEW_RELIC_SYNTHETIC_URL` e `NEW_RELIC_SYNTHETIC_LOCATIONS_JSON` somente em conjunto. O ambiente vem do Environment GitHub, o cluster de `EKS_CLUSTER_NAME`, e namespace/nomes de Secret/release usam defaults técnicos. Exclusões só passam no guard com `workflow_dispatch`, `apply=true`, `allow_destructive=true` e aprovação do Environment.
+`autoflow-infra` usa duas GitHub Variables opcionais por Environment: `ENABLE_NEWRELIC_KUBERNETES` e `ENABLE_NEWRELIC_ACCOUNT_RESOURCES` (ausentes equivalem a `false`). São ativáveis separadamente e não exigem flags no dispatch. Os recursos de conta exigem `NEW_RELIC_ACCOUNT_ID`, `NEW_RELIC_REGION` e o Secret `NEW_RELIC_API_KEY`; Synthetic aceita `NEW_RELIC_SYNTHETIC_URL` e `NEW_RELIC_SYNTHETIC_LOCATIONS_JSON` somente em conjunto. O ambiente vem do Environment GitHub; cluster e endpoint API Gateway são consultados na AWS após validar conta/região. Exclusões só passam no guard com `workflow_dispatch`, `apply=true`, `allow_destructive=true` e aprovação do Environment.
 
 ### Application runtime
 

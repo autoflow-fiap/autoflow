@@ -136,8 +136,8 @@ internos/NodePort privados e a configuração Nginx do frontend.
 
 O state do root `infra/` usa a key S3 `application/autoflow/terraform.tfstate`. Configure o bucket e a key aprovados
 por variáveis do ambiente; o workflow confirma que o objeto remoto existe antes do Terraform. O backend exige
-`AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY`, `AWS_RDS_STATE_KEY`, `API_GATEWAY_ORIGIN` e
-`API_GATEWAY_CORS_ORIGINS`. A API de negócio e o frontend são publicados na mesma origem HTTPS do API Gateway; não há
+`AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY`, `AWS_RDS_STATE_KEY` e
+`API_GATEWAY_CORS_ORIGINS`. A origem HTTPS é consultada automaticamente na API Gateway recriada; a API de negócio e o frontend são publicados nessa mesma origem; não há
 Ingress, plugin ou upstream Kong na arquitetura de aplicação.
 
 Para a configuração por nome de GitHub Actions, Terraform, runtime e Kubernetes, consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md) e o [histórico](docs/variables-changelog.md). Esta seção descreve a operação do Secret Kubernetes; a documentação operacional do pipeline permanece em [CI-CD-AWS.md](.github/CI-CD-AWS.md).
