@@ -1,7 +1,28 @@
 import unittest
 from unittest.mock import patch
 
-from smoke_api_gateway import parse_cors_origins, smoke
+from smoke_api_gateway import is_lambda_proxy_uri, parse_cors_origins, smoke
+
+
+class LambdaIntegrationUriTests(unittest.TestCase):
+    def test_accepts_api_gateway_lambda_proxy_uri_for_expected_region_and_account(self):
+        uri = (
+            "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/"
+            "arn:aws:lambda:us-east-1:123456789012:function:autoflow-login/invocations"
+        )
+        self.assertTrue(is_lambda_proxy_uri(uri, "us-east-1", "123456789012"))
+
+    def test_rejects_lambda_uri_for_different_account_or_region(self):
+        uri = (
+            "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/"
+            "arn:aws:lambda:us-east-1:123456789012:function:autoflow-login/invocations"
+        )
+        self.assertFalse(is_lambda_proxy_uri(uri, "us-west-2", "123456789012"))
+        self.assertFalse(is_lambda_proxy_uri(uri, "us-east-1", "999999999999"))
+
+    def test_rejects_non_invocation_uri(self):
+        uri = "arn:aws:lambda:us-east-1:123456789012:function:autoflow-login"
+        self.assertFalse(is_lambda_proxy_uri(uri, "us-east-1", "123456789012"))
 
 
 class CorsOriginsTests(unittest.TestCase):

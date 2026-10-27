@@ -566,4 +566,7 @@ jobs:
           test -n "$AWS_EXPECTED_ACCOUNT_ID" || { echo "AWS_EXPECTED_ACCOUNT_ID não está configurada" >&2; exit 1; }
           python -c 'import json, os; v=json.loads(os.environ["API_GATEWAY_CORS_ORIGINS"]); assert isinstance(v, list) and all(isinstance(x, str) and x.strip() for x in v), "API_GATEWAY_CORS_ORIGINS deve ser um array JSON de origens não vazias"'
       - name: Executar smoke tests
+        env:
+          AUTOFLOW_TEST_CPF_CNPJ: ${{ secrets.AUTOFLOW_TEST_CPF_CNPJ }}
+          AUTOFLOW_TEST_PASSWORD: ${{ secrets.AUTOFLOW_TEST_PASSWORD }}
         run: python scripts/smoke_api_gateway.py "$API_GATEWAY_ORIGIN" --region "$AWS_REGION" --account "$AWS_EXPECTED_ACCOUNT_ID" --cors-origins "$API_GATEWAY_CORS_ORIGINS"
