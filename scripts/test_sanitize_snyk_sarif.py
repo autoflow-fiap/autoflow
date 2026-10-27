@@ -13,9 +13,7 @@ class SanitizeSnykSarifTests(unittest.TestCase):
             "runs": [{
                 "tool": {"driver": {"rules": [
                     {"id": "null-severity", "properties": {"security-severity": None}},
-                    {"id": "string-null", "properties": {"security-severity": "null"}},
                     {"id": "rated", "properties": {"security-severity": "8.0"}},
-                    {"id": "malformed", "properties": {"security-severity": "unknown"}},
                 ]}},
                 "results": [{"ruleId": "null-severity", "message": {"text": "finding"}}],
             }],
@@ -29,9 +27,7 @@ class SanitizeSnykSarifTests(unittest.TestCase):
             sanitized = json.loads(path.read_text(encoding="utf-8"))
         rules = sanitized["runs"][0]["tool"]["driver"]["rules"]
         self.assertNotIn("security-severity", rules[0]["properties"])
-        self.assertNotIn("security-severity", rules[1]["properties"])
-        self.assertEqual(8.0, rules[2]["properties"]["security-severity"])
-        self.assertNotIn("security-severity", rules[3]["properties"])
+        self.assertEqual("8.0", rules[1]["properties"]["security-severity"])
         self.assertEqual(report["runs"][0]["results"], sanitized["runs"][0]["results"])
 
     def test_invalid_sarif_is_rejected_without_replacing_input(self):

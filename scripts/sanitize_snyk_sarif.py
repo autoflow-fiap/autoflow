@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -13,25 +12,11 @@ def remove_null_security_severity(value: Any) -> Any:
     if isinstance(value, list):
         return [remove_null_security_severity(item) for item in value]
     if isinstance(value, dict):
-        sanitized = {}
-        for key, item in value.items():
-            if key == "security-severity":
-                if isinstance(item, bool):
-                    continue
-                if isinstance(item, (int, float)):
-                    if math.isfinite(item):
-                        sanitized[key] = item
-                    continue
-                if isinstance(item, str):
-                    try:
-                        numeric = float(item)
-                    except ValueError:
-                        continue
-                    if math.isfinite(numeric):
-                        sanitized[key] = numeric
-                continue
-            sanitized[key] = remove_null_security_severity(item)
-        return sanitized
+        return {
+            key: remove_null_security_severity(item)
+            for key, item in value.items()
+            if not (key == "security-severity" and item is None)
+        }
     return value
 
 
