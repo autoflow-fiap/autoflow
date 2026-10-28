@@ -45,6 +45,14 @@ def aws(*args):
     return json.loads(result.stdout)
 
 
+def is_lambda_proxy_uri(uri, region, account):
+    prefix = (
+        f"arn:aws:apigateway:{region}:lambda:path/2015-03-31/functions/"
+        f"arn:aws:lambda:{region}:{account}:function:"
+    )
+    return isinstance(uri, str) and uri.startswith(prefix) and uri.endswith("/invocations")
+
+
 def infrastructure(api_id, region, account):
     check(aws("sts", "get-caller-identity")["Account"] == account, "conta AWS esperada")
     integrations = aws("apigatewayv2", "get-integrations", "--api-id", api_id, "--region", region)["Items"]
@@ -52,7 +60,8 @@ def infrastructure(api_id, region, account):
     login = next(route for route in routes if route["RouteKey"] == "POST /auth/login")
     integration = next(item for item in integrations if item["IntegrationId"] == login["Target"].split("/")[1])
     check(integration["IntegrationType"] == "AWS_PROXY" and integration["PayloadFormatVersion"] == "2.0"
-          and integration["IntegrationUri"].startswith("arn:aws:lambda:"), "login usa integração Lambda nativa v2")
+          and is_lambda_proxy_uri(integration["IntegrationUri"], region, account),
+          "login usa integração Lambda nativa v2")
     for link_id in {item["ConnectionId"] for item in integrations if item.get("ConnectionType") == "VPC_LINK"}:
         link = aws("apigatewayv2", "get-vpc-link", "--vpc-link-id", link_id, "--region", region)
         check(link["VpcLinkStatus"] == "AVAILABLE", "VPC Link AVAILABLE")

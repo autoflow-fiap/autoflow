@@ -66,7 +66,7 @@ Configurar como Repository Variables; não depender de defaults para conta, regi
 | `DOCKERHUB_USERNAME` | Namespace Docker Hub, obrigatório para publicação SHA |
 | `AWS_REGION`, `AWS_EXPECTED_ACCOUNT_ID` | Repository Variables de região e conta esperadas |
 | `AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY`, `AWS_RDS_STATE_KEY` | Repository Variables do bucket e keys `application/autoflow/terraform.tfstate` e `rds/terraform.tfstate` |
-| `EKS_CLUSTER_NAME`, `API_GATEWAY_ORIGIN`, `API_GATEWAY_CORS_ORIGINS` | Repository Variables do cluster e origens; CORS deve ser array JSON, por exemplo `[]` |
+| `API_GATEWAY_CORS_ORIGINS` | Repository Variable com allowlist JSON, por exemplo `[]`; cluster e endpoint público são consultados na AWS após validação da conta/região |
 | `AWS_TERRAFORM_STATE_BUCKET` | Inclui prefixo `ci/eks-endpoint-lease.json`, usado como registro durável de CIDR temporário; a role precisa de `s3:GetObject`, `s3:PutObject` e `s3:DeleteObject` nesse objeto |
 | `DOCKERHUB_USERNAME` | Repository Variable do namespace Docker Hub usado nas imagens |
 | `TERRAFORM_APPLY_APPROVAL_CONFIGURED` | Repository Variable guard adicional em `homolog`; não substitui Required reviewers efetivos |
