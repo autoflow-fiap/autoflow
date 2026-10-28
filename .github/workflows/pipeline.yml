@@ -23,7 +23,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: autoflow-application-${{ github.ref }}
+  group: autoflow-eks-endpoint-access
   cancel-in-progress: false
 
 jobs:
@@ -227,7 +227,7 @@ jobs:
       NEW_RELIC_LICENSE_SECRET_ID: ${{ vars.NEW_RELIC_LICENSE_SECRET_ID }}
       AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}
       EKS_LEASE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
-      EKS_LEASE_KEY: ci/eks-endpoint-lease.json
+      EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow.json
     steps:
       - uses: actions/checkout@v4
         with:
@@ -394,7 +394,7 @@ jobs:
       NEW_RELIC_LICENSE_SECRET_ID: ${{ vars.NEW_RELIC_LICENSE_SECRET_ID }}
       AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}
       EKS_LEASE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
-      EKS_LEASE_KEY: ci/eks-endpoint-lease.json
+      EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow.json
     steps:
       - uses: actions/checkout@v4
         with:

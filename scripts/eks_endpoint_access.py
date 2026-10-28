@@ -4,22 +4,32 @@ import argparse
 import ipaddress
 import json
 import os
+import re
 import subprocess
 import tempfile
 import time
+
+
+UPDATE_RETRIES = 3
+UPDATE_WAIT_ATTEMPTS = 60
+UPDATE_WAIT_SECONDS = 10
+
+
+class AwsOperationError(RuntimeError):
+    def __init__(self, operation, error):
+        stderr = error.stderr or ""
+        match = re.search(r"An error occurred \(([^)]+)\) when calling ([^:]+)", stderr)
+        self.code = match.group(1) if match else "UnknownAWSException"
+        self.operation = operation
+        detail = next((line.strip() for line in stderr.splitlines() if "An error occurred (" in line), self.code)
+        super().__init__(f"Comando AWS '{operation}' falhou: {detail}")
 
 
 def aws(*args):
     try:
         result = subprocess.run(["aws", *args, "--output", "json"], check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as error:
-        output = error.stderr or error.stdout or ""
-        detail = next((line.strip() for line in output.splitlines()
-                       if "An error occurred (" in line or "aws: [ERROR]:" in line), "")
-        operation = " ".join(args[:2])
-        if detail:
-            raise RuntimeError(f"Comando AWS '{operation}' falhou: {detail}") from None
-        raise RuntimeError(f"Comando AWS '{operation}' falhou (exit {error.returncode}; detalhe omitido).") from None
+        raise AwsOperationError(" ".join(args[:2]), error) from None
     return json.loads(result.stdout or "{}")
 
 
@@ -27,17 +37,56 @@ def config(cluster, region):
     return aws("eks", "describe-cluster", "--name", cluster, "--region", region)["cluster"]["resourcesVpcConfig"]
 
 
-def wait_update(cluster, region, cidrs):
-    response = aws("eks", "update-cluster-config", "--name", cluster, "--region", region,
-                   "--resources-vpc-config", "publicAccessCidrs=" + ",".join(sorted(set(cidrs))))
-    update_id = response["update"]["id"]
-    while True:
+def wait_for_update(cluster, region, update_id):
+    for _ in range(UPDATE_WAIT_ATTEMPTS):
         update = aws("eks", "describe-update", "--name", cluster, "--region", region, "--update-id", update_id)["update"]
         if update["status"] == "Successful":
             return
         if update["status"] in {"Failed", "Cancelled"}:
             raise RuntimeError(f"Atualização do endpoint EKS terminou como {update['status']}")
-        time.sleep(10)
+        time.sleep(UPDATE_WAIT_SECONDS)
+    raise RuntimeError("Tempo limite aguardando atualização do endpoint EKS; lease mantido.")
+
+
+def wait_for_active_updates(cluster, region):
+    for _ in range(UPDATE_WAIT_ATTEMPTS):
+        updates = aws("eks", "list-updates", "--name", cluster, "--region", region).get("updateIds", [])
+        active = []
+        for update_id in updates:
+            update = aws(
+                "eks", "describe-update", "--name", cluster, "--region", region, "--update-id", update_id
+            )["update"]
+            if update["status"] == "InProgress":
+                active.append(update_id)
+        if not active:
+            return
+        for update_id in active:
+            wait_for_update(cluster, region, update_id)
+    raise RuntimeError("Tempo limite aguardando atualizações EKS existentes; lease mantido.")
+
+
+def update_and_wait(cluster, region, cidrs, merge_current):
+    cidrs = set(cidrs)
+    for attempt in range(UPDATE_RETRIES):
+        wait_for_active_updates(cluster, region)
+        current = set(config(cluster, region)["publicAccessCidrs"])
+        desired = set(merge_current(current))
+        if "0.0.0.0/0" in desired:
+            raise RuntimeError("CIDR público irrestrito não permitido")
+        if desired == current:
+            return
+        value = "publicAccessCidrs=" + ",".join(sorted(desired))
+        try:
+            response = aws("eks", "update-cluster-config", "--name", cluster, "--region", region,
+                           "--resources-vpc-config", value)
+        except AwsOperationError as error:
+            if error.code != "ResourceInUseException" or attempt == UPDATE_RETRIES - 1:
+                raise
+            time.sleep(UPDATE_WAIT_SECONDS)
+            continue
+        wait_for_update(cluster, region, response["update"]["id"])
+        return
+    raise RuntimeError("Conflito transitório de atualização EKS; lease mantido.")
 
 
 def location():
@@ -76,8 +125,13 @@ def remove_lease():
 def cleanup(cluster, region, lease):
     current = set(config(cluster, region)["publicAccessCidrs"])
     desired = (current - {lease["temporary_cidr"]}) | set(lease["original_cidrs"])
+    if "0.0.0.0/0" in desired:
+        raise RuntimeError("CIDR público irrestrito não permitido; lease mantido")
     if current != desired:
-        wait_update(cluster, region, desired)
+        update_and_wait(
+            cluster, region, desired,
+            lambda latest: (latest - {lease["temporary_cidr"]}) | set(lease["original_cidrs"]),
+        )
     remove_lease()
 
 
@@ -93,10 +147,12 @@ def authorize(cluster, region, ip):
     current = set(config(cluster, region)["publicAccessCidrs"])
     if "189.6.8.245/32" not in current:
         raise RuntimeError("CIDR permanente 189.6.8.245/32 ausente; operação bloqueada")
+    if "0.0.0.0/0" in current:
+        raise RuntimeError("CIDR público irrestrito não permitido; operação bloqueada")
     lease = {"temporary_cidr": cidr, "original_cidrs": sorted(current)}
     save_lease(lease)
     if cidr not in current:
-        wait_update(cluster, region, current | {cidr})
+        update_and_wait(cluster, region, current | {cidr}, lambda latest: latest | {cidr})
 
 
 def main():
