@@ -511,6 +511,13 @@ jobs:
         env:
           NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
         run: python scripts/apply_newrelic_license_secret.py
+      - name: Reiniciar backend para carregar os Secrets atualizados
+        run: |
+          set -euo pipefail
+          if kubectl get deployment autoflow-backend --namespace default --ignore-not-found --output name | grep -q .; then
+            kubectl rollout restart deployment/autoflow-backend --namespace default
+            kubectl rollout status deployment/autoflow-backend --namespace default --timeout=5m
+          fi
       - name: Aplicar exatamente o plan aprovado e validado
         working-directory: infra
         run: |
