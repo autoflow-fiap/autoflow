@@ -107,13 +107,17 @@ docker compose up -d
 
 Os manifestos Kubernetes da entrega em [k8s/](k8s/) e do perfil local em [k8s-local/](k8s-local/) estão versionados,
 exceto os arquivos Secret, que são ignorados pelo Git. É necessário ter Minikube, Kind ou Kubernetes habilitado no
-Docker Desktop. Para o perfil local, mantenha `k8s-local/secret.yaml` apenas na máquina e preencha-o com os valores
-locais requeridos pelo PostgreSQL e pela aplicação, sem adicioná-lo ao Git.
+Docker Desktop. Em um clone novo, crie o Secret local a partir do modelo não sensível e preencha-o somente com valores
+locais:
 
 Os manifests de `k8s-local/` são para desenvolvimento local. O acesso AWS de homologação usa os serviços NodePort privados alcançáveis somente pelo ALB interno provisionado pelo API Gateway.
 
 ```bash
 cd k8s-local
+cp secret.yaml.example secret.yaml
+# Preencha localmente os campos POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD,
+# SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD, JWT_SECRET,
+# MAIL_PASSWORD e APP_PUBLIC_TOKEN_SECRET antes de aplicar.
 minikube start
 kubectl apply -f configmap.yaml
 kubectl apply -f secret.yaml
@@ -147,13 +151,15 @@ Para a configuração por nome de GitHub Actions, Terraform, runtime e Kubernete
 O Secret Kubernetes chama-se `autoflow-secrets`, no namespace `default`, e é consumido somente pelo Deployment
 `autoflow-backend` via `envFrom.secretRef`. O contrato mantém as chaves `SPRING_DATASOURCE_USERNAME`,
 `SPRING_DATASOURCE_PASSWORD`, `JWT_SECRET`, `MAIL_PASSWORD` e `APP_PUBLIC_TOKEN_SECRET`; o Deployment frontend não
-consome esse Secret. Os manifests `k8s/secret.yaml` e `k8s-local/secret.yaml` ficam ignorados pelo Git; não os force
-para o repositório.
+consome esse Secret. `k8s/secret.yaml` não é necessário no deploy de homologação: o workflow aplica o Secret diretamente
+com `scripts/apply_k8s_secret.py`, usando os GitHub Secrets `AUTOFLOW_DB_USERNAME`, `AUTOFLOW_DB_PASSWORD`,
+`AUTOFLOW_JWT_SECRET`, `AUTOFLOW_MAIL_PASSWORD` e `AUTOFLOW_PUBLIC_TOKEN_SECRET`. O arquivo `k8s-local/secret.yaml`
+é exclusivo do desenvolvimento local; use `k8s-local/secret.yaml.example` como modelo, substitua todos os valores de
+exemplo e mantenha o arquivo preenchido somente na máquina. Ambos os arquivos `secret.yaml` são ignorados pelo Git.
 
 Os Secrets `AUTOFLOW_DB_USERNAME`, `AUTOFLOW_DB_PASSWORD`, `AUTOFLOW_JWT_SECRET`, `AUTOFLOW_MAIL_PASSWORD` e
-`AUTOFLOW_PUBLIC_TOKEN_SECRET` são os valores planejados para atualizar o Secret do workload quando o deploy privado
-for habilitado. O workflow atual não os consome: deployment e `kubectl` estão bloqueados porque o runner hospedado não
-tem conectividade autorizada/validada à API Kubernetes do EKS. Não há produção implantada declarada.
+`AUTOFLOW_PUBLIC_TOKEN_SECRET` são usados pelo workflow para atualizar o Secret do workload no deploy de homologação.
+Não há produção implantada declarada.
 
 Para aplicar localmente em um contexto Kubernetes autorizado, forneça essas cinco variáveis no ambiente do processo
 a partir de um gerenciador seguro (sem incluí-las em comandos registrados ou arquivos versionados) e execute:
