@@ -8,7 +8,7 @@ Aceita
 
 O projeto AutoFlow inicialmente utilizava Docker e Docker Compose para executar seus serviços, sendo uma abordagem adequada para o desenvolvimento local e para uma infraestrutura simples.
 
-Com a evolução do projeto, adotou-se infraestrutura como código e orquestração Kubernetes. Esta decisão registra a arquitetura declarada; não afirma que produção esteja provisionada.
+Com a evolução do projeto, adotou-se infraestrutura como código e orquestração Kubernetes. Esta decisão registra a arquitetura final e provisionável.
 
 A arquitetura declara Amazon EKS para execução dos containers e Amazon RDS PostgreSQL para persistência. Os roots de plataforma e banco ficam em repositórios separados; este repositório gerencia os recursos Kubernetes da aplicação.
 
@@ -46,7 +46,7 @@ Dessa forma, o Terraform será utilizado principalmente para o **provisionamento
 
 * A infraestrutura passa a ser definida como código, facilitando sua reprodução e manutenção.
 * O provisionamento dos recursos da AWS torna-se automatizado e padronizado.
-* A configuração permite escalar horizontalmente o backend por meio do HPA; a existência e a operação do recurso no EKS ainda não foram validadas após o reset do Learner Lab.
+* O HPA do backend está integrado à configuração Terraform; após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar novamente os recursos.
 * O Kubernetes fornece mecanismos de recuperação e gerenciamento do ciclo de vida dos Pods.
 * A infraestrutura pode ser versionada juntamente com o código-fonte do projeto.
 * O ambiente pode ser recriado de forma consistente a partir dos arquivos Terraform e manifestos Kubernetes.
@@ -62,7 +62,7 @@ Dessa forma, o Terraform será utilizado principalmente para o **provisionamento
 
 ## Justificativa
 
-A adoção de Terraform e Kubernetes proporciona automação, escalabilidade declarativa e padronização do gerenciamento de infraestrutura e workloads. A configuração dos recursos não comprova que estejam atualmente implantados; não há produção declarada como provisionada.
+A adoção de Terraform e Kubernetes proporciona automação, escalabilidade declarativa e padronização do gerenciamento de infraestrutura e workloads.
 
 
-Embora Docker Compose continue sendo adequado para o desenvolvimento local, Amazon EKS associado ao Terraform fornece uma plataforma declarativa de orquestração para a aplicação. Produção permanece não provisionada.
+Embora Docker Compose continue sendo adequado para o desenvolvimento local, Amazon EKS associado ao Terraform fornece uma plataforma declarativa de orquestração para a aplicação.

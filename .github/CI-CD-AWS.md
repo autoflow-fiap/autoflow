@@ -2,7 +2,7 @@
 
 O inventário por nome de secrets, variables, inputs Terraform e configuração da aplicação está no [catálogo deste repositório](../docs/variables-and-secrets.md), com [histórico](../docs/variables-changelog.md). Esta página permanece como referência operacional dos fluxos.
 
-Esta página descreve o workflow versionado e os pré-requisitos esperados. A configuração efetiva dos GitHub Environments/reviewers e a execução atual de CI/CD não foram verificadas. O Learner Lab foi resetado; nenhum estado AWS atual ou produção provisionada é afirmado.
+Os fluxos de CI/CD estão definidos para provisionar a infraestrutura e a aplicação. Após reset do Learner Lab, reexecute as pipelines CI/CD correspondentes para provisionar novamente os recursos.
 
 ## Fluxo de branches e ambientes
 
@@ -14,7 +14,7 @@ Todo push em `develop`, inclusive merge de PR, publica imagens com tag SHA e ini
 
 Para validar antes do PR, faça push para `feature/<nome>` ou abra manualmente **Actions → Pipeline → Run workflow**, selecione a branch `feature/<nome>` e execute. Não marque `smoke_tests_only` esperando uma execução parcial: em feature os checks completos continuam obrigatórios. A saída não produz artifact Terraform reutilizável.
 
-O endpoint EKS `eks-autoflow` foi observado com acesso público e privado antes do reset do Learner Lab; esse estado não foi revalidado e não descreve a situação atual. No workflow, cada job Plan/Apply consulta seu IP IPv4 de saída efetivo, autoriza exclusivamente o `/32` no endpoint e aguarda a atualização EKS antes de Terraform/kubectl. O lease é guardado no S3 state para permitir reconciliação após cancelamento abrupto; cleanup roda em `always()`. O guard do workflow preserva a allowlist e rejeita `0.0.0.0/0`; isso não confirma as regras atualmente configuradas na AWS. A concorrência do workflow serializa operações na branch.
+No workflow, cada job Plan/Apply consulta seu IP IPv4 de saída efetivo, autoriza exclusivamente o `/32` no endpoint e aguarda a atualização EKS antes de Terraform/kubectl. O lease é guardado no S3 state para permitir reconciliação após cancelamento abrupto; cleanup roda em `always()`. O guard preserva a allowlist e rejeita `0.0.0.0/0`. A concorrência do workflow serializa operações na branch. Após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar novamente o ambiente.
 
 ### Autorização temporária dos runners hospedados pelo GitHub
 

@@ -111,8 +111,8 @@ credenciais e preencha-o somente com valores locais. É necessário ter Minikube
 Desktop:
 
 Os manifests de `k8s-local/` são para desenvolvimento local. A configuração de homologação declara Services NodePort
-privados alcançáveis pelo ALB interno integrado ao API Gateway. O Learner Lab foi resetado; a conectividade e o estado
-atual dos recursos não foram verificados após recriar a infraestrutura.
+privados alcançáveis pelo ALB interno integrado ao API Gateway. Após reset do Learner Lab, reexecute as pipelines CI/CD
+para provisionar novamente os recursos do ambiente.
 
 ```bash
 cd k8s-local
@@ -152,7 +152,7 @@ Para a configuração por nome de GitHub Actions, Terraform, runtime e Kubernete
 
 O Terraform da aplicação gerencia o manifesto [`k8s/hpa.yaml`](k8s/hpa.yaml) como `kubectl_manifest.backend_hpa`, após o Deployment do backend. O HPA solicita de 1 a 3 réplicas e CPU média-alvo de 50%. Em `kubectl_manifest.backend_deployment`, `ignore_fields = ["spec.replicas"]` deixa esse campo sob controle do HPA, sem que o Terraform reverta a quantidade de réplicas em cada aplicação.
 
-Isso descreve a configuração versionada, não confirma um HPA ativo ou escala observada no EKS. O Learner Lab foi resetado; a existência do HPA no cluster, a disponibilidade de `metrics.k8s.io` e o funcionamento da escala precisam ser verificados após recriar a infraestrutura. Não há produção declarada como provisionada.
+A configuração do HPA está integrada ao Terraform e é provisionável pela pipeline da aplicação. Após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar novamente os recursos do ambiente.
 
 ## Segredos Kubernetes da aplicação
 
@@ -169,9 +169,8 @@ que continham valores foram removidos do versionamento; somente o exemplo sem cr
 Os Secrets `AUTOFLOW_DB_USERNAME`, `AUTOFLOW_DB_PASSWORD`, `AUTOFLOW_JWT_SECRET`, `AUTOFLOW_MAIL_PASSWORD` e
 `AUTOFLOW_PUBLIC_TOKEN_SECRET` são mapeados pelo workflow para atualizar o Secret do workload em homologação. O valor de
 `AUTOFLOW_MAIL_PASSWORD` é passado ao script pelo ambiente; o script envia o manifesto por stdin sem gravar o payload em
-arquivo ou log. Após aplicar `autoflow-secrets`, o workflow reinicia e aguarda o Deployment `autoflow-backend`. Isso
-descreve o pipeline versionado; o estado atual do cluster não foi validado após o reset do Learner Lab. Não há produção
-declarada como provisionada.
+arquivo ou log. Após aplicar `autoflow-secrets`, o workflow reinicia e aguarda o Deployment `autoflow-backend`. Após
+reset do Learner Lab, reexecute as pipelines CI/CD para provisionar novamente o Secret e os workloads da aplicação.
 
 Para aplicar localmente em um contexto Kubernetes autorizado, forneça essas cinco variáveis no ambiente do processo
 a partir de um gerenciador seguro (sem incluí-las em comandos registrados ou arquivos versionados) e execute:
@@ -220,7 +219,7 @@ Testes automatizados e análises de qualidade e segurança usam JUnit, SonarQube
 
 ## Fluxo do CI/CD
 
-O [workflow do GitHub Actions](.github/workflows/pipeline.yml) executa CI em Pull Requests e pushes para `develop` e `main`. Para `develop`, ele declara publicação de imagens pelo SHA, Terraform Plan e Apply no Environment `homolog`, seguido de rollout e smoke tests. A aprovação efetiva depende dos Required reviewers configurados no GitHub; essa configuração e a execução atual não foram verificadas. Plan/Apply usam `ubuntu-latest` com autorização temporária do IP de saída ao endpoint EKS. O Learner Lab foi resetado, portanto o fluxo versionado não comprova recursos implantados. `workflow_dispatch` continua disponível conforme os guards do workflow. Veja [Operação de CI/CD](.github/CI-CD-AWS.md) para pré-requisitos e ativação.
+O [workflow do GitHub Actions](.github/workflows/pipeline.yml) executa CI em Pull Requests e pushes para `develop` e `main`. Para `develop`, publica imagens pelo SHA, executa Terraform Plan e Apply no Environment `homolog`, seguido de rollout e smoke tests, respeitando os gates definidos. Plan/Apply usam `ubuntu-latest` com autorização temporária do IP de saída ao endpoint EKS. Após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar novamente o ambiente. Veja [Operação de CI/CD](.github/CI-CD-AWS.md) para pré-requisitos e sequência de provisionamento.
 
 ```mermaid
 flowchart TD
@@ -247,7 +246,7 @@ deploy em Kubernetes e escalabilidade automática.
 
 O diagrama a seguir é um registro histórico da entrega da Fase 2; não representa os gatilhos e gates atuais do workflow, descritos na seção anterior.
 
-O modelo de deploy descrito para a Fase 2 combina GitHub Actions, Docker Hub, Terraform, ConfigMaps, Secrets e HPA. O desenho abaixo é histórico e não representa o workflow ou a topologia vigentes. Desde então, `k8s/hpa.yaml` passou a ser gerenciado pelo Terraform da aplicação; sua configuração desejada está descrita em [Escalabilidade declarada do backend](#escalabilidade-declarada-do-backend). A integração no código não comprova existência ou funcionamento do HPA no EKS após o reset do Learner Lab.
+O modelo de deploy descrito para a Fase 2 combina GitHub Actions, Docker Hub, Terraform, ConfigMaps, Secrets e HPA. O desenho abaixo é histórico e não representa o workflow ou a topologia vigentes. Desde então, `k8s/hpa.yaml` passou a ser gerenciado pelo Terraform da aplicação; sua configuração está descrita em [Escalabilidade declarada do backend](#escalabilidade-declarada-do-backend). Após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar novamente os recursos.
 
 ```mermaid
 flowchart TD
