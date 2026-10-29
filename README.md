@@ -105,12 +105,14 @@ docker compose up -d
 
 ## Kubernetes local 
 
-Os manifestos Kubernetes da entrega em [k8s/](k8s/) e do perfil local em [k8s-local/](k8s-local/) estão versionados,
-exceto os arquivos Secret, que são ignorados pelo Git. É necessário ter Minikube, Kind ou Kubernetes habilitado no
-Docker Desktop. Em um clone novo, crie o Secret local a partir do modelo não sensível e preencha-o somente com valores
-locais:
+Os manifestos Kubernetes da entrega em [k8s/](k8s/) e do perfil local em [k8s-local/](k8s-local/) estão versionados.
+Manifests `secret.yaml` com valores não são versionados; em um clone novo, crie o Secret local a partir do modelo sem
+credenciais e preencha-o somente com valores locais. É necessário ter Minikube, Kind ou Kubernetes habilitado no Docker
+Desktop:
 
-Os manifests de `k8s-local/` são para desenvolvimento local. O acesso AWS de homologação usa os serviços NodePort privados alcançáveis somente pelo ALB interno provisionado pelo API Gateway.
+Os manifests de `k8s-local/` são para desenvolvimento local. A configuração de homologação declara Services NodePort
+privados alcançáveis pelo ALB interno integrado ao API Gateway. O Learner Lab foi resetado; a conectividade e o estado
+atual dos recursos não foram verificados após recriar a infraestrutura.
 
 ```bash
 cd k8s-local
@@ -135,7 +137,7 @@ O frontend fica disponível em `http://localhost:30180` e o backend em `http://l
 
 O código Terraform de deploy da aplicação está em [infra/](infra/). A plataforma EKS, o API Gateway HTTP, o VPC Link,
 o ALB interno, IAM e os recursos compartilhados pertencem ao repositório
-[autoflow-infra](https://github.com/BrunoSousa06/autoflow-infra). Este repositório gerencia Deployments, Services
+[autoflow-infra](https://github.com/autoflow-fiap/autoflow-infra). Este repositório gerencia Deployments, Services
 internos/NodePort privados e a configuração Nginx do frontend.
 
 O state do root `infra/` usa a key S3 `application/autoflow/terraform.tfstate`. Configure o bucket e a key aprovados
@@ -146,6 +148,12 @@ Ingress, plugin ou upstream Kong na arquitetura de aplicação.
 
 Para a configuração por nome de GitHub Actions, Terraform, runtime e Kubernetes, consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md) e o [histórico](docs/variables-changelog.md). Esta seção descreve a operação do Secret Kubernetes; a documentação operacional do pipeline permanece em [CI-CD-AWS.md](.github/CI-CD-AWS.md).
 
+### Escalabilidade declarada do backend
+
+O Terraform da aplicação gerencia o manifesto [`k8s/hpa.yaml`](k8s/hpa.yaml) como `kubectl_manifest.backend_hpa`, após o Deployment do backend. O HPA solicita de 1 a 3 réplicas e CPU média-alvo de 50%. Em `kubectl_manifest.backend_deployment`, `ignore_fields = ["spec.replicas"]` deixa esse campo sob controle do HPA, sem que o Terraform reverta a quantidade de réplicas em cada aplicação.
+
+Isso descreve a configuração versionada, não confirma um HPA ativo ou escala observada no EKS. O Learner Lab foi resetado; a existência do HPA no cluster, a disponibilidade de `metrics.k8s.io` e o funcionamento da escala precisam ser verificados após recriar a infraestrutura. Não há produção declarada como provisionada.
+
 ## Segredos Kubernetes da aplicação
 
 O Secret Kubernetes chama-se `autoflow-secrets`, no namespace `default`, e é consumido somente pelo Deployment
@@ -155,11 +163,15 @@ consome esse Secret. `k8s/secret.yaml` não é necessário no deploy de homologa
 com `scripts/apply_k8s_secret.py`, usando os GitHub Secrets `AUTOFLOW_DB_USERNAME`, `AUTOFLOW_DB_PASSWORD`,
 `AUTOFLOW_JWT_SECRET`, `AUTOFLOW_MAIL_PASSWORD` e `AUTOFLOW_PUBLIC_TOKEN_SECRET`. O arquivo `k8s-local/secret.yaml`
 é exclusivo do desenvolvimento local; use `k8s-local/secret.yaml.example` como modelo, substitua todos os valores de
-exemplo e mantenha o arquivo preenchido somente na máquina. Ambos os arquivos `secret.yaml` são ignorados pelo Git.
+exemplo e mantenha o arquivo preenchido somente na máquina. Os manifests `k8s/secret.yaml` e `k8s-local/secret.yaml`
+que continham valores foram removidos do versionamento; somente o exemplo sem credenciais permanece rastreado.
 
 Os Secrets `AUTOFLOW_DB_USERNAME`, `AUTOFLOW_DB_PASSWORD`, `AUTOFLOW_JWT_SECRET`, `AUTOFLOW_MAIL_PASSWORD` e
-`AUTOFLOW_PUBLIC_TOKEN_SECRET` são usados pelo workflow para atualizar o Secret do workload no deploy de homologação.
-Não há produção implantada declarada.
+`AUTOFLOW_PUBLIC_TOKEN_SECRET` são mapeados pelo workflow para atualizar o Secret do workload em homologação. O valor de
+`AUTOFLOW_MAIL_PASSWORD` é passado ao script pelo ambiente; o script envia o manifesto por stdin sem gravar o payload em
+arquivo ou log. Após aplicar `autoflow-secrets`, o workflow reinicia e aguarda o Deployment `autoflow-backend`. Isso
+descreve o pipeline versionado; o estado atual do cluster não foi validado após o reset do Learner Lab. Não há produção
+declarada como provisionada.
 
 Para aplicar localmente em um contexto Kubernetes autorizado, forneça essas cinco variáveis no ambiente do processo
 a partir de um gerenciador seguro (sem incluí-las em comandos registrados ou arquivos versionados) e execute:
@@ -208,7 +220,7 @@ Testes automatizados e análises de qualidade e segurança usam JUnit, SonarQube
 
 ## Fluxo do CI/CD
 
-O [workflow do GitHub Actions](.github/workflows/pipeline.yml) executa CI em Pull Requests e pushes para `develop` e `main`. Todo push em `develop` publica imagens pelo SHA, executa Terraform Plan e aguarda aprovação humana efetiva no Environment `homolog` antes do Apply, rollout e smoke tests. Plan/Apply usam `ubuntu-latest` com autorização temporária do IP de saída ao endpoint EKS. `workflow_dispatch` continua disponível para reexecução manual. Veja [Operação de CI/CD](.github/CI-CD-AWS.md) para pré-requisitos e ativação.
+O [workflow do GitHub Actions](.github/workflows/pipeline.yml) executa CI em Pull Requests e pushes para `develop` e `main`. Para `develop`, ele declara publicação de imagens pelo SHA, Terraform Plan e Apply no Environment `homolog`, seguido de rollout e smoke tests. A aprovação efetiva depende dos Required reviewers configurados no GitHub; essa configuração e a execução atual não foram verificadas. Plan/Apply usam `ubuntu-latest` com autorização temporária do IP de saída ao endpoint EKS. O Learner Lab foi resetado, portanto o fluxo versionado não comprova recursos implantados. `workflow_dispatch` continua disponível conforme os guards do workflow. Veja [Operação de CI/CD](.github/CI-CD-AWS.md) para pré-requisitos e ativação.
 
 ```mermaid
 flowchart TD
@@ -235,7 +247,7 @@ deploy em Kubernetes e escalabilidade automática.
 
 O diagrama a seguir é um registro histórico da entrega da Fase 2; não representa os gatilhos e gates atuais do workflow, descritos na seção anterior.
 
-O modelo de deploy descrito para a Fase 2 combina GitHub Actions, Docker Hub, Terraform, ConfigMaps, Secrets e HPA. O manifesto [`k8s/hpa.yaml`](k8s/hpa.yaml) está versionado, mas sua aplicação efetiva em qualquer ambiente não é comprovada pela presença do arquivo.
+O modelo de deploy descrito para a Fase 2 combina GitHub Actions, Docker Hub, Terraform, ConfigMaps, Secrets e HPA. O desenho abaixo é histórico e não representa o workflow ou a topologia vigentes. Desde então, `k8s/hpa.yaml` passou a ser gerenciado pelo Terraform da aplicação; sua configuração desejada está descrita em [Escalabilidade declarada do backend](#escalabilidade-declarada-do-backend). A integração no código não comprova existência ou funcionamento do HPA no EKS após o reset do Learner Lab.
 
 ```mermaid
 flowchart TD

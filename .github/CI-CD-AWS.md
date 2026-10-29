@@ -2,6 +2,8 @@
 
 O inventário por nome de secrets, variables, inputs Terraform e configuração da aplicação está no [catálogo deste repositório](../docs/variables-and-secrets.md), com [histórico](../docs/variables-changelog.md). Esta página permanece como referência operacional dos fluxos.
 
+Esta página descreve o workflow versionado e os pré-requisitos esperados. A configuração efetiva dos GitHub Environments/reviewers e a execução atual de CI/CD não foram verificadas. O Learner Lab foi resetado; nenhum estado AWS atual ou produção provisionada é afirmado.
+
 ## Fluxo de branches e ambientes
 
 CI executa em Pull Requests para `develop`/`main` e pushes para `develop`, `main` e `feature/*`, incluindo testes, builds e validação estática. Em `feature/*`, `workflow_dispatch` executa a mesma validação mesmo que `smoke_tests_only` esteja marcado: Maven `verify` com JaCoCo/Testcontainers, testes e build Angular, validações de manifests/helpers, `terraform fmt -check`, `terraform validate` sem backend e builds locais das imagens Docker. Não usa secrets nem credenciais AWS, não publica imagens e não executa Plan remoto, Apply, deploy, smoke tests remotos ou bootstrap.
@@ -12,11 +14,11 @@ Todo push em `develop`, inclusive merge de PR, publica imagens com tag SHA e ini
 
 Para validar antes do PR, faça push para `feature/<nome>` ou abra manualmente **Actions → Pipeline → Run workflow**, selecione a branch `feature/<nome>` e execute. Não marque `smoke_tests_only` esperando uma execução parcial: em feature os checks completos continuam obrigatórios. A saída não produz artifact Terraform reutilizável.
 
-O endpoint EKS `eks-autoflow` tem acesso público e privado habilitados. Cada job Plan/Apply consulta seu IP IPv4 de saída efetivo, autoriza exclusivamente o `/32` no endpoint e aguarda a atualização EKS antes de Terraform/kubectl. O lease é guardado no S3 state para permitir reconciliação após cancelamento abrupto; cleanup roda em `always()`. A allowlist existente, incluindo `189.6.8.245/32`, é preservada e `0.0.0.0/0` não é permitido. A concorrência do workflow serializa operações na branch.
+O endpoint EKS `eks-autoflow` foi observado com acesso público e privado antes do reset do Learner Lab; esse estado não foi revalidado e não descreve a situação atual. No workflow, cada job Plan/Apply consulta seu IP IPv4 de saída efetivo, autoriza exclusivamente o `/32` no endpoint e aguarda a atualização EKS antes de Terraform/kubectl. O lease é guardado no S3 state para permitir reconciliação após cancelamento abrupto; cleanup roda em `always()`. O guard do workflow preserva a allowlist e rejeita `0.0.0.0/0`; isso não confirma as regras atualmente configuradas na AWS. A concorrência do workflow serializa operações na branch.
 
 ### Autorização temporária dos runners hospedados pelo GitHub
 
-Plan e Apply usam `ubuntu-latest`; não dependem de EC2 self-hosted, GitHub App, PAT ou Secrets Manager de runner. Ambos consomem a mesma sessão AWS definida em Repository Secrets. A role precisa das permissões para atualizar o endpoint EKS, consultar status da atualização e ler/escrever/remover o lease no prefixo S3 configurado. Consulte [o guia](../../autoflow-infra/docs/github-runner.md) para detalhes do mecanismo.
+Plan e Apply usam `ubuntu-latest`; não dependem de EC2 self-hosted, GitHub App, PAT ou Secrets Manager de runner. Ambos consomem a mesma sessão AWS definida em Repository Secrets. A role precisa das permissões para atualizar o endpoint EKS, consultar status da atualização e ler/escrever/remover o lease no prefixo S3 configurado. Consulte o [guia de runner privado](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/github-runner.md) para detalhes do mecanismo relacionado.
 
 O Plan roda sem Environment e usa Repository Secrets/Variables. Ele gera `infra.tfplan`, verifica exclusões/substituições e publica o arquivo criptografado como artifact da execução com retenção de um dia. O artifact contém ciphertext e metadados; `TF_PLAN_ENCRYPTION_KEY` (mínimo de 32 caracteres aleatórios) é Repository Secret e não integra o artifact. Hashes e metadados vinculam o plan ao commit, Terraform, providers, backend e configuração.
 

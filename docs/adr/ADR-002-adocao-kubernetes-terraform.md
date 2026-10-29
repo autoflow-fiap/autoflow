@@ -1,16 +1,16 @@
-# ADR-002 - Adoção de Kubernetes e Terraform
+# ADR-002 — Adoção de Kubernetes e Terraform
 
 ## Status
 
-Accepted
+Aceita
 
 ## Contexto
 
 O projeto AutoFlow inicialmente utilizava Docker e Docker Compose para executar seus serviços, sendo uma abordagem adequada para o desenvolvimento local e para uma infraestrutura simples.
 
-Com a evolução do projeto, surgiu a necessidade de utilizar uma infraestrutura mais robusta, escalável e adequada para execução em ambiente de produção.
+Com a evolução do projeto, adotou-se infraestrutura como código e orquestração Kubernetes. Esta decisão registra a arquitetura declarada; não afirma que produção esteja provisionada.
 
-A infraestrutura passou a utilizar recursos da AWS, incluindo Amazon EKS para execução dos containers e Amazon RDS PostgreSQL para persistência dos dados.
+A arquitetura declara Amazon EKS para execução dos containers e Amazon RDS PostgreSQL para persistência. Os roots de plataforma e banco ficam em repositórios separados; este repositório gerencia os recursos Kubernetes da aplicação.
 
 Diante disso, foi necessário definir uma estratégia para o provisionamento e gerenciamento da infraestrutura, bem como para a orquestração e execução dos containers da aplicação.
 
@@ -18,17 +18,14 @@ Diante disso, foi necessário definir uma estratégia para o provisionamento e g
 
 Foi decidido utilizar **Terraform** como ferramenta de Infrastructure as Code (IaC) e **Kubernetes**, por meio do **Amazon EKS**, como plataforma de orquestração dos containers do AutoFlow.
 
-O Terraform será responsável pelo provisionamento e gerenciamento dos recursos de infraestrutura da AWS, incluindo:
+O Terraform é utilizado nos repositórios correspondentes para provisionar e gerenciar recursos AWS, incluindo:
 
-* VPC e recursos de rede;
-* Subnets e tabelas de roteamento;
-* Security Groups;
-* Cluster Amazon EKS;
-* Node Groups;
-* Amazon RDS PostgreSQL;
-* Demais recursos necessários para a infraestrutura da aplicação.
+* VPC, rede, cluster Amazon EKS, node group, Amazon API Gateway HTTP API, VPC Link e ALB em `autoflow-infra`;
+* Amazon RDS PostgreSQL em `autoflow-db`;
+* Lambda e sua configuração de execução em `autoflow-lambda`;
+* Deployments, Services, ConfigMaps e demais recursos Kubernetes da aplicação neste repositório.
 
-O Terraform também será utilizado para aplicar e gerenciar os manifestos Kubernetes necessários para a execução da aplicação no cluster.
+O Terraform da aplicação também aplica e gerencia os manifestos Kubernetes necessários para executar os workloads.
 
 O Kubernetes será responsável pela execução e gerenciamento dos workloads da aplicação no Amazon EKS, incluindo:
 
@@ -39,6 +36,8 @@ O Kubernetes será responsável pela execução e gerenciamento dos workloads da
 * Escalabilidade dos workloads;
 * Gerenciamento dos Deployments e demais recursos da aplicação.
 
+O `HorizontalPodAutoscaler` do backend é declarado em `k8s/hpa.yaml` e gerenciado por `kubectl_manifest.backend_hpa` em `infra/k8s-deployment.tf`. A configuração solicita de 1 a 3 réplicas e CPU média-alvo de 50%. O Deployment ignora `spec.replicas` por meio de `ignore_fields = ["spec.replicas"]`, deixando o número de réplicas sob controle do HPA.
+
 Dessa forma, o Terraform será utilizado principalmente para o **provisionamento e gerenciamento da infraestrutura**, enquanto o Kubernetes será responsável pela **orquestração e execução dos workloads da aplicação**.
 
 ## Consequências
@@ -47,7 +46,7 @@ Dessa forma, o Terraform será utilizado principalmente para o **provisionamento
 
 * A infraestrutura passa a ser definida como código, facilitando sua reprodução e manutenção.
 * O provisionamento dos recursos da AWS torna-se automatizado e padronizado.
-* A aplicação pode ser escalada horizontalmente por meio do Kubernetes.
+* A configuração permite escalar horizontalmente o backend por meio do HPA; a existência e a operação do recurso no EKS ainda não foram validadas após o reset do Learner Lab.
 * O Kubernetes fornece mecanismos de recuperação e gerenciamento do ciclo de vida dos Pods.
 * A infraestrutura pode ser versionada juntamente com o código-fonte do projeto.
 * O ambiente pode ser recriado de forma consistente a partir dos arquivos Terraform e manifestos Kubernetes.
@@ -63,7 +62,7 @@ Dessa forma, o Terraform será utilizado principalmente para o **provisionamento
 
 ## Justificativa
 
-A adoção de Terraform e Kubernetes foi escolhida para proporcionar maior automação, escalabilidade, padronização e capacidade de gerenciamento da infraestrutura do AutoFlow.
+A adoção de Terraform e Kubernetes proporciona automação, escalabilidade declarativa e padronização do gerenciamento de infraestrutura e workloads. A configuração dos recursos não comprova que estejam atualmente implantados; não há produção declarada como provisionada.
 
 
-Embora Docker Compose continue sendo adequado para o desenvolvimento local, o uso do Amazon EKS associado ao Terraform fornece uma estrutura mais apropriada para o gerenciamento da aplicação em um ambiente de produção baseado em AWS.
+Embora Docker Compose continue sendo adequado para o desenvolvimento local, Amazon EKS associado ao Terraform fornece uma plataforma declarativa de orquestração para a aplicação. Produção permanece não provisionada.

@@ -1,10 +1,10 @@
 # Variables e secrets
 
-Catálogo observado no código e configuração deste repositório. Push em `develop` usa o Environment `homolog`; push em `main` prepara o plan para `production`, sem apply automático. Apply de `main` requer `workflow_dispatch` e a aprovação efetiva do Environment `production`. Cada environment mantém Variables/Secrets próprios; não compartilhar valores entre homologação e produção.
+Catálogo observado no código e configuração deste repositório. Push em `develop` usa o Environment `homolog`; push em `main` prepara o plan para `production`, sem apply automático. O workflow condiciona Apply de `main` a `workflow_dispatch` e ao Environment `production`. A configuração efetiva dos Environments/reviewers não foi consultada e produção não é declarada como provisionada. Cada environment deve manter Variables/Secrets próprios; não compartilhar valores entre homologação e produção.
 
 ## GitHub Actions
 
-Os jobs de PR não publicam imagens. Push em `develop` e `main` requer acesso ao Docker Hub para publicar tags SHA. `SONAR_TOKEN` e `SNYK_TOKEN` são usados pelos scans. Plan e Apply usam GitHub-hosted runners e o mesmo Environment de destino. Os reviewers efetivos protegem Apply; produção só aplica por dispatch manual. As configurações por environment prevalecem para o respectivo job.
+Os jobs de PR não publicam imagens. Push em `develop` e `main` requer acesso ao Docker Hub para publicar tags SHA. `SONAR_TOKEN` e `SNYK_TOKEN` são usados pelos scans. Plan e Apply usam GitHub-hosted runners e o mesmo Environment de destino. O Apply depende da proteção efetiva do Environment, mas a configuração de reviewers não foi validada nesta revisão; produção só entra no caminho de Apply por dispatch manual e não é declarada como provisionada. As configurações por environment prevalecem para o respectivo job.
 
 Após reset do Learner Lab, não recadastre `EKS_CLUSTER_NAME` nem `API_GATEWAY_ORIGIN`: o workflow valida conta/região e consulta o cluster e a HTTP API do ambiente. Mantenha bucket/key dos states, `AWS_REGION`, `AWS_EXPECTED_ACCOUNT_ID`, credenciais temporárias, secrets de aplicação, Docker Hub, chave de criptografia, configuração CORS e a proteção de aprovação conforme as tabelas abaixo.
 
