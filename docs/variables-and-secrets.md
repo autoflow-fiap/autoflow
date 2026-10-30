@@ -48,6 +48,7 @@ Os inputs são passados por `TF_VAR_*` no processo Terraform, não são GitHub V
 |---|---|---|
 | `project_name` | Opcional; `autoflow` | Prefixo de recursos; configuração local. |
 | `region_default` | Opcional; `us-east-1` | Região provider; workflow injeta `AWS_REGION`. |
+| `aws_allowed_account_ids` | Obrigatório; lista não vazia de IDs de 12 dígitos, sem default | Derivada pelo workflow de `AWS_EXPECTED_ACCOUNT_ID`; restringe o provider, o backend S3 e `terraform_remote_state`. |
 | `terraform_state_bucket` | Obrigatório; sem default | Bucket de states; `AWS_TERRAFORM_STATE_BUCKET`. |
 | `rds_state_key` | Obrigatória; sem default | State remoto RDS; workflow injeta `AWS_RDS_STATE_KEY` do mesmo Environment. |
 | `cidr_vpc` | Opcional; `10.0.0.0/16` | CIDR VPC; configuração local. |

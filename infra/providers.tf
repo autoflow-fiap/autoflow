@@ -22,7 +22,11 @@ provider "aws" {
 variable "aws_allowed_account_ids" {
   description = "Contas permitidas; o pipeline fornece obrigatoriamente a conta esperada."
   type        = list(string)
-  default     = null
+
+  validation {
+    condition     = length(var.aws_allowed_account_ids) > 0 && alltrue([for id in var.aws_allowed_account_ids : can(regex("^[0-9]{12}$", id))])
+    error_message = "aws_allowed_account_ids deve conter pelo menos um ID de conta AWS válido, fornecido externamente."
+  }
 }
 
 provider "kubectl" {

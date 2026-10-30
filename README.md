@@ -155,6 +155,10 @@ root `infra/` recebe `AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY`, `AWS_RDS_
 `API_GATEWAY_CORS_ORIGINS`, região, cluster e endpoint HTTPS da API. Credenciais, account ID, endpoints e conteúdo
 de Terraform State permanecem fora do repositório. Consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md)
 para a configuração dos Environments e [Operação de CI/CD](.github/CI-CD-AWS.md) para a ordem de provisionamento.
+O workflow deriva `TF_VAR_aws_allowed_account_ids` de `AWS_EXPECTED_ACCOUNT_ID`; essa allowlist restringe o backend S3 e o
+`terraform_remote_state` de RDS. As verificações de ownership continuam usando `--expected-bucket-owner` nas chamadas
+AWS CLI compatíveis, sem incluir esse argumento na configuração Terraform. O backend mantém `encrypt=true` e
+`use_lockfile=true`.
 Não há Ingress, plugin ou upstream Kong na arquitetura de aplicação.
 
 Para a configuração por nome de GitHub Actions, Terraform, runtime e Kubernetes, consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md) e o [histórico](docs/variables-changelog.md). Esta seção descreve a operação do Secret Kubernetes; a documentação operacional do pipeline permanece em [CI-CD-AWS.md](.github/CI-CD-AWS.md).

@@ -51,10 +51,10 @@ no Environment, mesmo que haja Repository Variables com o mesmo nome.
 A descoberta aceita outros clusters na mesma conta e região: seleciona somente o nome esperado para o branch. O API
 Gateway também é selecionado pelo nome do ambiente (`autoflow-homolog` ou `autoflow-production`). O root Terraform da
 aplicação recebe o endpoint HTTPS dessa API e `AWS_RDS_STATE_KEY` do Environment selecionado; não usa endpoint, cluster
-ou State de outro ambiente. A região é fornecida pelo Environment e validada antes das operações AWS. O backend S3
-recebe o owner esperado do bucket. Terraform 1.16.5 não aceita `expected_bucket_owner` na configuração do data source
-embutido `terraform_remote_state`; por isso, o workflow valida o objeto RDS com `head-object --expected-bucket-owner`
-antes de inicializar o backend e ler os outputs remotos.
+ou State de outro ambiente. A região é fornecida pelo Environment e validada antes das operações AWS. O workflow deriva
+`allowed_account_ids` de `AWS_EXPECTED_ACCOUNT_ID` para restringir o backend S3 e o `terraform_remote_state`. As
+verificações de ownership do bucket e do objeto RDS usam `head-bucket`/`head-object --expected-bucket-owner` pela AWS CLI
+antes de inicializar o backend e ler os outputs remotos; esse argumento não é passado ao Terraform.
 
 Não configure nomes de cluster/API nem account IDs no repositório. Ao mudar a conta Learner Lab, atualize os Secrets e
 Variables daquele Environment, o bucket/keys de State e as roles/credenciais autorizadas; não é necessário alterar
