@@ -109,9 +109,9 @@ Manifests `secret.yaml` com valores não são versionados; em um clone novo, cri
 credenciais e preencha-o somente com valores locais. É necessário ter Minikube, Kind ou Kubernetes habilitado no Docker
 Desktop:
 
-Os manifests de `k8s-local/` são para desenvolvimento local. A configuração de homologação declara Services NodePort
-privados alcançáveis pelo ALB interno integrado ao API Gateway. Após reset do Learner Lab, reexecute as pipelines CI/CD
-para provisionar novamente os recursos do ambiente.
+Os manifests de `k8s-local/` são para desenvolvimento local. Nos clusters dedicados de homologação e produção, os
+Services NodePort privados são alcançáveis pelo ALB interno integrado ao API Gateway. Após reset do Learner Lab,
+reexecute as pipelines CI/CD para provisionar novamente os recursos do ambiente.
 
 ```bash
 cd k8s-local
@@ -139,11 +139,23 @@ o ALB interno, IAM e os recursos compartilhados pertencem ao repositório
 [autoflow-infra](https://github.com/autoflow-fiap/autoflow-infra). Este repositório gerencia Deployments, Services
 internos/NodePort privados e a configuração Nginx do frontend.
 
-O state do root `infra/` usa a key S3 `application/autoflow/terraform.tfstate`. Configure o bucket e a key aprovados
-por variáveis do ambiente; o workflow confirma que o objeto remoto existe antes do Terraform. O backend exige
-`AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY`, `AWS_RDS_STATE_KEY` e
-`API_GATEWAY_CORS_ORIGINS`. A origem HTTPS é consultada automaticamente na API Gateway recriada; a API de negócio e o frontend são publicados nessa mesma origem; não há
-Ingress, plugin ou upstream Kong na arquitetura de aplicação.
+O root `infra/` usa backend S3 e recebe bucket e keys pelo GitHub Environment selecionado. `develop` implanta em
+`homolog`; `main` implanta em `production`. Cada ambiente aponta para a conta AWS, bucket e credenciais próprios.
+Quando os ambientes usam a mesma conta e bucket, suas keys precisam ser distintas. A key de produção usa o prefixo
+`production/`; a aplicação e o RDS sempre usam keys diferentes. O workflow verifica a identidade AWS esperada, a
+região, o owner do bucket e a separação das keys antes de inicializar Terraform.
+
+| Branch | GitHub Environment | Cluster EKS esperado | API Gateway HTTP esperada |
+|---|---|---|---|
+| `develop` | `homolog` | `eks-autoflow` | `autoflow-homolog` |
+| `main` | `production` | `eks-autoflow-production` | `autoflow-production` |
+
+O workflow seleciona o recurso com o nome exato do ambiente, mesmo quando a conta contém outros clusters ou APIs. O
+root `infra/` recebe `AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY`, `AWS_RDS_STATE_KEY`,
+`API_GATEWAY_CORS_ORIGINS`, região, cluster e endpoint HTTPS da API. Credenciais, account ID, endpoints e conteúdo
+de Terraform State permanecem fora do repositório. Consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md)
+para a configuração dos Environments e [Operação de CI/CD](.github/CI-CD-AWS.md) para a ordem de provisionamento.
+Não há Ingress, plugin ou upstream Kong na arquitetura de aplicação.
 
 Para a configuração por nome de GitHub Actions, Terraform, runtime e Kubernetes, consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md) e o [histórico](docs/variables-changelog.md). Esta seção descreve a operação do Secret Kubernetes; a documentação operacional do pipeline permanece em [CI-CD-AWS.md](.github/CI-CD-AWS.md).
 
@@ -153,11 +165,15 @@ O Terraform da aplicação gerencia o manifesto [`k8s/hpa.yaml`](k8s/hpa.yaml) c
 
 A configuração do HPA está integrada ao Terraform e é provisionável pela pipeline da aplicação. Após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar novamente os recursos do ambiente.
 
+O Metrics Server do cluster de produção não foi confirmado. Verifique se a API `metrics.k8s.io` está disponível no EKS
+real antes de aceitar a operação do HPA. Se estiver ausente, o provisionamento deve fornecer uma instalação segura,
+declarativa e compatível; não copie `k8s-local/metrics-server.yaml`, que contém opções TLS inseguras.
+
 ## Segredos Kubernetes da aplicação
 
-O Secret `autoflow-secrets`, no namespace `default`, é consumido somente pelo backend; o frontend não o utiliza. Em homologação, a pipeline mapeia GitHub Secrets para esse Secret usando `scripts/apply_k8s_secret.py`, que envia o manifesto por stdin sem gravá-lo em arquivo ou log e reinicia o backend. Consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md) e [Operação de CI/CD](.github/CI-CD-AWS.md) para os nomes e etapas do fluxo.
+O Secret `autoflow-secrets`, no namespace `default`, é consumido somente pelo backend; o frontend não o utiliza. Em homologação e produção, a pipeline mapeia os Environment Secrets para esse Secret usando `scripts/apply_k8s_secret.py`, que envia o manifesto por stdin sem gravá-lo em arquivo ou log e reinicia o backend. Consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md) e [Operação de CI/CD](.github/CI-CD-AWS.md) para os nomes e etapas do fluxo.
 
-Para desenvolvimento local, use `k8s-local/secret.yaml.example` e mantenha os valores somente na máquina. Manifests Secret preenchidos foram removidos do Git; `k8s/secret.yaml` não é necessário para o deploy de homologação.
+Para desenvolvimento local, use `k8s-local/secret.yaml.example` e mantenha os valores somente na máquina. Manifests Secret preenchidos foram removidos de `develop`; `k8s/secret.yaml` não é necessário para o deploy nos clusters dedicados. A remoção ainda precisa chegar a `main` por Pull Request aprovado antes de habilitar produção.
 
 Restrinja o RBAC de leitura e escrita de Secrets, confirme a proteção KMS do cluster e rotacione credenciais que tenham sido versionadas ou persistidas em state. Após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar o Secret e os workloads.
 
@@ -187,16 +203,31 @@ Testes automatizados e análises de qualidade e segurança usam JUnit, SonarQube
 
 ## Fluxo do CI/CD
 
-O [workflow do GitHub Actions](.github/workflows/pipeline.yml) executa CI em Pull Requests e pushes para `develop` e `main`. Para `develop`, publica imagens pelo SHA, executa Terraform Plan e Apply no Environment `homolog`, seguido de rollout e smoke tests, respeitando os gates definidos. Plan/Apply usam `ubuntu-latest` com autorização temporária do IP de saída ao endpoint EKS. Após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar novamente o ambiente. Veja [Operação de CI/CD](.github/CI-CD-AWS.md) para pré-requisitos e sequência de provisionamento.
+O [workflow do GitHub Actions](.github/workflows/pipeline.yml) mantém CI em Pull Requests e branches de trabalho sem
+credenciais AWS ou Apply. Push em `develop` publica imagens imutáveis pelo SHA e implanta em `homolog`; push em `main`
+executa o mesmo fluxo em `production`. Em ambos, o Plan só segue após testes/build/validação Terraform e publicação
+Docker; Apply usa o artifact do mesmo commit e aguarda os gates efetivos do GitHub Environment. O push não autoriza
+destruições ou substituições: a opção destrutiva só pode ser solicitada em `workflow_dispatch`, após revisão e aprovação.
+O deploy inclui atualização do Secret Kubernetes, rollout de backend/frontend e, em homologação, smoke tests do API
+Gateway. Em produção, não são executados smoke tests com credenciais sintéticas de homologação.
+
+O provisionamento cross-repositório segue esta ordem: VPC/EKS, RDS, Lambda/autenticação, API Gateway e aplicação. A
+aplicação depende do API Gateway para configurar a origem pública; o backend executa as migrations Flyway existentes
+ao iniciar. Se New Relic APM estiver habilitado no Environment, a pipeline sincroniza a License Key do GitHub Secrets
+com AWS Secrets Manager e Kubernetes sem registrá-la em logs, Terraform State ou artifacts.
+
+Para habilitar a produção, configure o GitHub Environment `production` restrito a `main`, com credenciais, Variables,
+Secrets, States e Required reviewers próprios. A remoção dos manifests de Secrets já presente em `develop` deve chegar
+a `main` por Pull Request aprovado antes de habilitar o deploy de produção. A documentação de CI/CD descreve os
+pré-requisitos externos e as pendências que só podem ser confirmadas no cluster real.
 
 ```mermaid
 flowchart TD
-  A[PR ou push em develop/main] --> B[CI: testes, builds, análises e Terraform estático]
-  A --> C{Push em develop?}
-  C -->|Sim| D[Publicação Docker Hub com tags SHA]
-  D --> P[Plan no ubuntu-latest]
-  P --> G{Aprovação do Environment homolog}
-  G -->|Aprovado| T[Apply e rollout]
+  A[Push em develop/main] --> B[CI: testes, builds, segurança e Terraform estático]
+  B --> D[Publicação Docker Hub com tags SHA]
+  D --> P[Plan no Environment do branch]
+  P --> G{Gates efetivos do Environment}
+  G -->|Aprovado| T[Apply do plan e rollout]
   G -->|Rejeitado| X[Deploy interrompido]
-  C -->|Não| F[Sem publicação/deploy]
+  R[PR ou branch de trabalho] --> C[CI sem Apply ou acesso AWS]
 ```

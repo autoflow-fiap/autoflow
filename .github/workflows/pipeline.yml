@@ -23,7 +23,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: autoflow-eks-endpoint-access
+  group: autoflow-eks-endpoint-access-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -197,7 +197,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=frontend
 
   deploy-plan:
-    name: Plan de homologação no GitHub-hosted runner
+    name: Plan Terraform do ambiente no GitHub-hosted runner
     runs-on: ubuntu-latest
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
     needs: [backend-build, frontend-build, terraform-static, docker-publish]
@@ -210,11 +210,13 @@ jobs:
     env:
       GITHUB_DEPLOYMENT_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
       PLAN_ARTIFACT_NAME: autoflow-terraform-plan-${{ github.run_id }}-${{ github.run_attempt }}
-      ALLOW_DESTRUCTIVE: ${{ github.event_name == 'push' && 'true' || (github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false') }}
+      ALLOW_DESTRUCTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false' }}
       AWS_REGION: ${{ vars.AWS_REGION }}
       TF_STATE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
       TF_STATE_KEY: ${{ vars.AWS_TF_STATE_KEY }}
+      AWS_RDS_STATE_KEY: ${{ vars.AWS_RDS_STATE_KEY }}
       TF_VAR_terraform_state_bucket: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
+      TF_VAR_rds_state_key: ${{ vars.AWS_RDS_STATE_KEY }}
       TF_VAR_dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}
       TF_VAR_backend_image_tag: ${{ github.sha }}
       TF_VAR_frontend_image_tag: ${{ github.sha }}
@@ -227,11 +229,13 @@ jobs:
       NEW_RELIC_LICENSE_SECRET_ID: ${{ vars.NEW_RELIC_LICENSE_SECRET_ID }}
       AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}
       EKS_LEASE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
-      EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow.json
+      EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow-${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}.json
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
+      - name: Validar branch, Environment e separação de Terraform States
+        run: python scripts/pipeline_resource_discovery.py validate-config
       - name: Validar configuração e credenciais AWS temporárias
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -244,6 +248,7 @@ jobs:
           test -n "$AWS_SESSION_TOKEN"
           test -n "$TF_STATE_BUCKET"
           test -n "$TF_STATE_KEY"
+          test -n "$AWS_RDS_STATE_KEY"
           test -n "$TF_VAR_aws_allowed_account_ids"
           test -n "$TF_VAR_gateway_cors_origins"
       - uses: aws-actions/configure-aws-credentials@v4
@@ -256,19 +261,8 @@ jobs:
         env:
           AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}
         run: python scripts/verify_aws_account.py
-      - name: Descobrir cluster EKS e endpoint do API Gateway
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ "$AWS_REGION" =~ ^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$ ]]
-          test "$(aws ec2 describe-availability-zones --region "$AWS_REGION" --query 'AvailabilityZones[0].RegionName' --output text)" = "$AWS_REGION"
-          mapfile -t CLUSTERS < <(aws eks list-clusters --region "$AWS_REGION" --query 'clusters[]' --output text | tr '\t' '\n' | sed '/^$/d')
-          test "${#CLUSTERS[@]}" -eq 1 || { echo "Esperado exatamente um cluster EKS na conta/região; encontrados ${#CLUSTERS[@]}." >&2; exit 1; }
-          DEPLOY_ENVIRONMENT="${GITHUB_REF##*/}"
-          if [ "$DEPLOY_ENVIRONMENT" = main ]; then DEPLOY_ENVIRONMENT=production; else DEPLOY_ENVIRONMENT=homolog; fi
-          mapfile -t ENDPOINTS < <(aws apigatewayv2 get-apis --region "$AWS_REGION" --query "Items[?Name=='autoflow-${DEPLOY_ENVIRONMENT}'].ApiEndpoint" --output text | tr '\t' '\n' | sed '/^$/d;/^None$/d')
-          test "${#ENDPOINTS[@]}" -eq 1 && [[ "${ENDPOINTS[0]}" == https://* ]] || { echo "Esperada exatamente uma HTTP API autoflow-${DEPLOY_ENVIRONMENT} com endpoint HTTPS." >&2; exit 1; }
-          printf 'TF_VAR_cluster_name=%s\nTF_VAR_gateway_public_origin=%s\n' "${CLUSTERS[0]}" "${ENDPOINTS[0]}" >> "$GITHUB_ENV"
+      - name: Descobrir cluster EKS e endpoint do API Gateway do ambiente
+        run: python scripts/pipeline_resource_discovery.py discover
       - name: Validar configuração New Relic do environment
         run: python scripts/apply_newrelic_license_secret.py validate
       - name: Vincular configuração New Relic não secreta ao plan
@@ -299,11 +293,11 @@ jobs:
         with:
           terraform_version: "1.16.5"
           terraform_wrapper: false
-      - name: Confirmar states existentes e inicializar backend
+      - name: Validar owner do bucket e inicializar backend Terraform
         working-directory: infra
         run: |
           set -euo pipefail
-          aws s3api head-bucket --bucket "$TF_STATE_BUCKET"
+          aws s3api head-bucket --bucket "$TF_STATE_BUCKET" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID"
           terraform init -input=false -reconfigure \
             -lockfile=readonly \
             -backend-config="bucket=$TF_STATE_BUCKET" \
@@ -369,7 +363,7 @@ jobs:
     name: Aprovação, Apply e rollout protegido por environment
     runs-on: ubuntu-latest
     needs: deploy-plan
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.smoke_tests_only) && ((github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) || (github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch')) }}
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.smoke_tests_only) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main') }}
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
     env:
       GITHUB_DEPLOYMENT_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
@@ -377,11 +371,13 @@ jobs:
       EXPECTED_PLAN_SHA256: ${{ needs.deploy-plan.outputs.plan_sha256 }}
       EXPECTED_METADATA_SHA256: ${{ needs.deploy-plan.outputs.metadata_sha256 }}
       EXPECTED_NEWRELIC_INPUTS_SHA256: ${{ needs.deploy-plan.outputs.newrelic_inputs_sha256 }}
-      ALLOW_DESTRUCTIVE: ${{ github.event_name == 'push' && 'true' || (github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false') }}
+      ALLOW_DESTRUCTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false' }}
       AWS_REGION: ${{ vars.AWS_REGION }}
       TF_STATE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
       TF_STATE_KEY: ${{ vars.AWS_TF_STATE_KEY }}
+      AWS_RDS_STATE_KEY: ${{ vars.AWS_RDS_STATE_KEY }}
       TF_VAR_terraform_state_bucket: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
+      TF_VAR_rds_state_key: ${{ vars.AWS_RDS_STATE_KEY }}
       TF_VAR_dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}
       TF_VAR_backend_image_tag: ${{ github.sha }}
       TF_VAR_frontend_image_tag: ${{ github.sha }}
@@ -394,11 +390,13 @@ jobs:
       NEW_RELIC_LICENSE_SECRET_ID: ${{ vars.NEW_RELIC_LICENSE_SECRET_ID }}
       AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}
       EKS_LEASE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
-      EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow.json
+      EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow-${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}.json
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
+      - name: Validar branch, Environment e separação de Terraform States
+        run: python scripts/pipeline_resource_discovery.py validate-config
       - name: Configurar credenciais temporárias AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -416,19 +414,8 @@ jobs:
           test "${{ vars.TERRAFORM_APPLY_APPROVAL_CONFIGURED }}" = true
           REVIEWERS=$(gh api "repos/$GITHUB_REPOSITORY/environments/$GITHUB_DEPLOYMENT_ENVIRONMENT" --jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length')
           test "$REVIEWERS" -gt 0
-      - name: Descobrir cluster EKS e endpoint do API Gateway
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ "$AWS_REGION" =~ ^[a-z]{2}(-gov)?-[a-z]+-[0-9]+$ ]]
-          test "$(aws ec2 describe-availability-zones --region "$AWS_REGION" --query 'AvailabilityZones[0].RegionName' --output text)" = "$AWS_REGION"
-          mapfile -t CLUSTERS < <(aws eks list-clusters --region "$AWS_REGION" --query 'clusters[]' --output text | tr '\t' '\n' | sed '/^$/d')
-          test "${#CLUSTERS[@]}" -eq 1 || { echo "Esperado exatamente um cluster EKS na conta/região; encontrados ${#CLUSTERS[@]}." >&2; exit 1; }
-          DEPLOY_ENVIRONMENT="${GITHUB_REF##*/}"
-          if [ "$DEPLOY_ENVIRONMENT" = main ]; then DEPLOY_ENVIRONMENT=production; else DEPLOY_ENVIRONMENT=homolog; fi
-          mapfile -t ENDPOINTS < <(aws apigatewayv2 get-apis --region "$AWS_REGION" --query "Items[?Name=='autoflow-${DEPLOY_ENVIRONMENT}'].ApiEndpoint" --output text | tr '\t' '\n' | sed '/^$/d;/^None$/d')
-          test "${#ENDPOINTS[@]}" -eq 1 && [[ "${ENDPOINTS[0]}" == https://* ]] || { echo "Esperada exatamente uma HTTP API autoflow-${DEPLOY_ENVIRONMENT} com endpoint HTTPS." >&2; exit 1; }
-          printf 'TF_VAR_cluster_name=%s\nTF_VAR_gateway_public_origin=%s\n' "${CLUSTERS[0]}" "${ENDPOINTS[0]}" >> "$GITHUB_ENV"
+      - name: Descobrir cluster EKS e endpoint do API Gateway do ambiente
+        run: python scripts/pipeline_resource_discovery.py discover
       - name: Validar configuração New Relic do environment
         run: python scripts/apply_newrelic_license_secret.py validate
       - name: Reconciliar autorização órfã anterior
@@ -460,7 +447,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          aws s3api head-bucket --bucket "$TF_STATE_BUCKET"
+          aws s3api head-bucket --bucket "$TF_STATE_BUCKET" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID"
           terraform init -input=false -reconfigure -lockfile=readonly \
             -backend-config="bucket=$TF_STATE_BUCKET" \
             -backend-config="key=$TF_STATE_KEY" \
@@ -504,10 +491,10 @@ jobs:
           AUTOFLOW_PUBLIC_TOKEN_SECRET: ${{ secrets.AUTOFLOW_PUBLIC_TOKEN_SECRET }}
         run: python scripts/apply_k8s_secret.py
       - name: Preparar cliente AWS para bootstrap seguro do Secret
-        if: env.ENABLE_NEWRELIC_APM == 'true' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog'
+        if: env.ENABLE_NEWRELIC_APM == 'true'
         run: python -m pip install --disable-pip-version-check boto3
       - name: Sincronizar License Key do Secrets Manager para o Secret Kubernetes
-        if: env.ENABLE_NEWRELIC_APM == 'true' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog'
+        if: env.ENABLE_NEWRELIC_APM == 'true'
         env:
           NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
         run: python scripts/apply_newrelic_license_secret.py
