@@ -14,7 +14,6 @@ autoflow/
 ```
 
 ---
-
 ## Documentação do Projeto
 
 Este README é o ponto de entrada da entrega. Para os detalhes técnicos, consulte:
@@ -105,12 +104,14 @@ docker compose up -d
 
 ## Kubernetes local 
 
-Os manifestos Kubernetes da entrega em [k8s/](k8s/) e do perfil local em [k8s-local/](k8s-local/) estão versionados,
-exceto os arquivos Secret, que são ignorados pelo Git. É necessário ter Minikube, Kind ou Kubernetes habilitado no
-Docker Desktop. Em um clone novo, crie o Secret local a partir do modelo não sensível e preencha-o somente com valores
-locais:
+Os manifestos Kubernetes da entrega em [k8s/](k8s/) e do perfil local em [k8s-local/](k8s-local/) estão versionados.
+Manifests `secret.yaml` com valores não são versionados; em um clone novo, crie o Secret local a partir do modelo sem
+credenciais e preencha-o somente com valores locais. É necessário ter Minikube, Kind ou Kubernetes habilitado no Docker
+Desktop:
 
-Os manifests de `k8s-local/` são para desenvolvimento local. O acesso AWS de homologação usa os serviços NodePort privados alcançáveis somente pelo ALB interno provisionado pelo API Gateway.
+Os manifests de `k8s-local/` são para desenvolvimento local. A configuração de homologação declara Services NodePort
+privados alcançáveis pelo ALB interno integrado ao API Gateway. Após reset do Learner Lab, reexecute as pipelines CI/CD
+para provisionar novamente os recursos do ambiente.
 
 ```bash
 cd k8s-local
@@ -135,7 +136,7 @@ O frontend fica disponível em `http://localhost:30180` e o backend em `http://l
 
 O código Terraform de deploy da aplicação está em [infra/](infra/). A plataforma EKS, o API Gateway HTTP, o VPC Link,
 o ALB interno, IAM e os recursos compartilhados pertencem ao repositório
-[autoflow-infra](https://github.com/BrunoSousa06/autoflow-infra). Este repositório gerencia Deployments, Services
+[autoflow-infra](https://github.com/autoflow-fiap/autoflow-infra). Este repositório gerencia Deployments, Services
 internos/NodePort privados e a configuração Nginx do frontend.
 
 O state do root `infra/` usa a key S3 `application/autoflow/terraform.tfstate`. Configure o bucket e a key aprovados
@@ -146,41 +147,19 @@ Ingress, plugin ou upstream Kong na arquitetura de aplicação.
 
 Para a configuração por nome de GitHub Actions, Terraform, runtime e Kubernetes, consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md) e o [histórico](docs/variables-changelog.md). Esta seção descreve a operação do Secret Kubernetes; a documentação operacional do pipeline permanece em [CI-CD-AWS.md](.github/CI-CD-AWS.md).
 
+### Escalabilidade declarada do backend
+
+O Terraform da aplicação gerencia o manifesto [`k8s/hpa.yaml`](k8s/hpa.yaml) como `kubectl_manifest.backend_hpa`, após o Deployment do backend. O HPA solicita de 1 a 3 réplicas e CPU média-alvo de 50%. Em `kubectl_manifest.backend_deployment`, `ignore_fields = ["spec.replicas"]` deixa esse campo sob controle do HPA, sem que o Terraform reverta a quantidade de réplicas em cada aplicação.
+
+A configuração do HPA está integrada ao Terraform e é provisionável pela pipeline da aplicação. Após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar novamente os recursos do ambiente.
+
 ## Segredos Kubernetes da aplicação
 
-O Secret Kubernetes chama-se `autoflow-secrets`, no namespace `default`, e é consumido somente pelo Deployment
-`autoflow-backend` via `envFrom.secretRef`. O contrato mantém as chaves `SPRING_DATASOURCE_USERNAME`,
-`SPRING_DATASOURCE_PASSWORD`, `JWT_SECRET`, `MAIL_PASSWORD` e `APP_PUBLIC_TOKEN_SECRET`; o Deployment frontend não
-consome esse Secret. `k8s/secret.yaml` não é necessário no deploy de homologação: o workflow aplica o Secret diretamente
-com `scripts/apply_k8s_secret.py`, usando os GitHub Secrets `AUTOFLOW_DB_USERNAME`, `AUTOFLOW_DB_PASSWORD`,
-`AUTOFLOW_JWT_SECRET`, `AUTOFLOW_MAIL_PASSWORD` e `AUTOFLOW_PUBLIC_TOKEN_SECRET`. O arquivo `k8s-local/secret.yaml`
-é exclusivo do desenvolvimento local; use `k8s-local/secret.yaml.example` como modelo, substitua todos os valores de
-exemplo e mantenha o arquivo preenchido somente na máquina. Ambos os arquivos `secret.yaml` são ignorados pelo Git.
+O Secret `autoflow-secrets`, no namespace `default`, é consumido somente pelo backend; o frontend não o utiliza. Em homologação, a pipeline mapeia GitHub Secrets para esse Secret usando `scripts/apply_k8s_secret.py`, que envia o manifesto por stdin sem gravá-lo em arquivo ou log e reinicia o backend. Consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md) e [Operação de CI/CD](.github/CI-CD-AWS.md) para os nomes e etapas do fluxo.
 
-Os Secrets `AUTOFLOW_DB_USERNAME`, `AUTOFLOW_DB_PASSWORD`, `AUTOFLOW_JWT_SECRET`, `AUTOFLOW_MAIL_PASSWORD` e
-`AUTOFLOW_PUBLIC_TOKEN_SECRET` são usados pelo workflow para atualizar o Secret do workload no deploy de homologação.
-Não há produção implantada declarada.
+Para desenvolvimento local, use `k8s-local/secret.yaml.example` e mantenha os valores somente na máquina. Manifests Secret preenchidos foram removidos do Git; `k8s/secret.yaml` não é necessário para o deploy de homologação.
 
-Para aplicar localmente em um contexto Kubernetes autorizado, forneça essas cinco variáveis no ambiente do processo
-a partir de um gerenciador seguro (sem incluí-las em comandos registrados ou arquivos versionados) e execute:
-
-```bash
-python scripts/apply_k8s_secret.py
-```
-
-O script exige valores não vazios e envia um manifesto efêmero diretamente por stdin; não cria arquivo local. Configure
-o RBAC da identidade de deploy com o mínimo necessário: `get`, `create`, `patch` e `update` de Secrets no namespace
-`default`, além das permissões estritamente requeridas pelo Terraform para os demais recursos da aplicação. Acesso de
-leitura a Secrets deve ser restrito a administradores/operadores autorizados, pois identidades com esse acesso podem
-recuperar os valores.
-
-O código local não comprova criptografia em repouso do cluster EKS: o responsável pela plataforma deve confirmar que
-o armazenamento de Secrets usa envelope encryption/KMS e políticas de acesso apropriadas antes de homologar. Terraform
-não cria mais esse Secret e deixa de receber as credenciais de banco. O bloco `removed` preserva o recurso Kubernetes
-existente enquanto o remove do state atual no próximo apply; versões históricas do state ainda podem conter valores
-previamente aplicados. O backend S3 declara `encrypt = true`, mas isso, por si só, não elimina cópias antigas nem
-comprova KMS. Antes de habilitar o gate, o owner deve avaliar o state histórico e restringir seu acesso; valores que
-já foram versionados ou persistidos em state devem ser rotacionados por procedimento operacional aprovado.
+Restrinja o RBAC de leitura e escrita de Secrets, confirme a proteção KMS do cluster e rotacione credenciais que tenham sido versionadas ou persistidas em state. Após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar o Secret e os workloads.
 
 ---
 
@@ -208,7 +187,7 @@ Testes automatizados e análises de qualidade e segurança usam JUnit, SonarQube
 
 ## Fluxo do CI/CD
 
-O [workflow do GitHub Actions](.github/workflows/pipeline.yml) executa CI em Pull Requests e pushes para `develop` e `main`. Todo push em `develop` publica imagens pelo SHA, executa Terraform Plan e aguarda aprovação humana efetiva no Environment `homolog` antes do Apply, rollout e smoke tests. Plan/Apply usam `ubuntu-latest` com autorização temporária do IP de saída ao endpoint EKS. `workflow_dispatch` continua disponível para reexecução manual. Veja [Operação de CI/CD](.github/CI-CD-AWS.md) para pré-requisitos e ativação.
+O [workflow do GitHub Actions](.github/workflows/pipeline.yml) executa CI em Pull Requests e pushes para `develop` e `main`. Para `develop`, publica imagens pelo SHA, executa Terraform Plan e Apply no Environment `homolog`, seguido de rollout e smoke tests, respeitando os gates definidos. Plan/Apply usam `ubuntu-latest` com autorização temporária do IP de saída ao endpoint EKS. Após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar novamente o ambiente. Veja [Operação de CI/CD](.github/CI-CD-AWS.md) para pré-requisitos e sequência de provisionamento.
 
 ```mermaid
 flowchart TD
@@ -221,49 +200,3 @@ flowchart TD
   G -->|Rejeitado| X[Deploy interrompido]
   C -->|Não| F[Sem publicação/deploy]
 ```
-
----
-
-## Entrega — Tech Challenge Fase 2 (histórico)
-
-### Objetivos da Fase 2
-
-Evoluir o AutoFlow com Clean Architecture, testes automatizados, APIs operacionais, infraestrutura como código, CI/CD,
-deploy em Kubernetes e escalabilidade automática.
-
-### Arquitetura de deploy documentada para a Fase 2
-
-O diagrama a seguir é um registro histórico da entrega da Fase 2; não representa os gatilhos e gates atuais do workflow, descritos na seção anterior.
-
-O modelo de deploy descrito para a Fase 2 combina GitHub Actions, Docker Hub, Terraform, ConfigMaps, Secrets e HPA. O manifesto [`k8s/hpa.yaml`](k8s/hpa.yaml) está versionado, mas sua aplicação efetiva em qualquer ambiente não é comprovada pela presença do arquivo.
-
-```mermaid
-flowchart TD
-    A["Push ou Pull Request<br/>develop / main"] --> B["Testes do backend + SonarQube<br/>Maven · Testcontainers · JaCoCo"]
-    A --> C["Testes do frontend<br/>npm test"]
-
-    B --> D["Build backend<br/>mvn package"]
-    C --> E["Build frontend<br/>npm run build"]
-
-    A --> F{"Push na branch develop?"}
-    F -->|Sim| G["Snyk Security Scan<br/>dependências e imagens"]
-
-    D --> H["Build e publicação Docker<br/>Backend e frontend no Docker Hub"]
-    E --> H
-    F -->|Sim| H
-
-    H --> I["Deploy Terraform<br/>init · validate · plan · apply"]
-    I --> J["AWS / EKS<br/>recursos Kubernetes"]
-```
-
-Consulte a [fonte Mermaid do diagrama](docs/diagramas-arquitetura/arquitetura-deploy-fase-2.mermaid) e a [documentação
-detalhada da arquitetura de deploy](docs/diagramas-arquitetura/README.md).
-
-### Evidências da entrega
-
-- [Manifestos Kubernetes](k8s/)
-- [Código Terraform](infra/)
-- [Pipeline GitHub Actions](.github/workflows/pipeline.yml)
-- [Contrato OpenAPI versionado](docs/openapi/autoflow-api.json)
-- [Documentação da API](docs/openapi/README.md)
-- [Vídeo demonstrativo da Fase 2](https://youtu.be/ObUkVeYQCOA)
