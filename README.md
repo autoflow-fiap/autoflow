@@ -14,7 +14,6 @@ autoflow/
 ```
 
 ---
-
 ## Documentação do Projeto
 
 Este README é o ponto de entrada da entrega. Para os detalhes técnicos, consulte:
@@ -232,49 +231,3 @@ flowchart TD
   G -->|Rejeitado| X[Deploy interrompido]
   C -->|Não| F[Sem publicação/deploy]
 ```
-
----
-
-## Entrega — Tech Challenge Fase 2 (histórico)
-
-### Objetivos da Fase 2
-
-Evoluir o AutoFlow com Clean Architecture, testes automatizados, APIs operacionais, infraestrutura como código, CI/CD,
-deploy em Kubernetes e escalabilidade automática.
-
-### Arquitetura de deploy documentada para a Fase 2
-
-O diagrama a seguir é um registro histórico da entrega da Fase 2; não representa os gatilhos e gates atuais do workflow, descritos na seção anterior.
-
-O modelo de deploy descrito para a Fase 2 combina GitHub Actions, Docker Hub, Terraform, ConfigMaps, Secrets e HPA. O desenho abaixo é histórico e não representa o workflow ou a topologia vigentes. Desde então, `k8s/hpa.yaml` passou a ser gerenciado pelo Terraform da aplicação; sua configuração está descrita em [Escalabilidade declarada do backend](#escalabilidade-declarada-do-backend). Após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar novamente os recursos.
-
-```mermaid
-flowchart TD
-    A["Push ou Pull Request<br/>develop / main"] --> B["Testes do backend + SonarQube<br/>Maven · Testcontainers · JaCoCo"]
-    A --> C["Testes do frontend<br/>npm test"]
-
-    B --> D["Build backend<br/>mvn package"]
-    C --> E["Build frontend<br/>npm run build"]
-
-    A --> F{"Push na branch develop?"}
-    F -->|Sim| G["Snyk Security Scan<br/>dependências e imagens"]
-
-    D --> H["Build e publicação Docker<br/>Backend e frontend no Docker Hub"]
-    E --> H
-    F -->|Sim| H
-
-    H --> I["Deploy Terraform<br/>init · validate · plan · apply"]
-    I --> J["AWS / EKS<br/>recursos Kubernetes"]
-```
-
-Consulte a [fonte Mermaid do diagrama](docs/diagramas-arquitetura/arquitetura-deploy-fase-2.mermaid) e a [documentação
-detalhada da arquitetura de deploy](docs/diagramas-arquitetura/README.md).
-
-### Evidências da entrega
-
-- [Manifestos Kubernetes](k8s/)
-- [Código Terraform](infra/)
-- [Pipeline GitHub Actions](.github/workflows/pipeline.yml)
-- [Contrato OpenAPI versionado](docs/openapi/autoflow-api.json)
-- [Documentação da API](docs/openapi/README.md)
-- [Vídeo demonstrativo da Fase 2](https://youtu.be/ObUkVeYQCOA)
