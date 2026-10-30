@@ -6,7 +6,7 @@ Catálogo observado no código e configuração deste repositório. Push em `dev
 
 Os jobs de PR e branches de trabalho não publicam imagens nem executam Plan/Apply AWS. Push em `develop` e `main` publica tags SHA imutáveis usando `vars.DOCKERHUB_USERNAME` e o Repository Secret `secrets.DOCKERHUB_PASSWORD`. `SONAR_TOKEN` e `SNYK_TOKEN` são usados pelas análises existentes. Plan e Apply usam GitHub-hosted runners e o Environment da branch; Apply aguarda os Required reviewers efetivos. Operações destrutivas não são autorizadas por push e só podem ser solicitadas por `workflow_dispatch`, com aprovação do Environment.
 
-Configure os Environments `homolog` e `production`, limitando deployments a `develop` e `main`. Não cadastre `EKS_CLUSTER_NAME` nem `API_GATEWAY_ORIGIN`: após validar a identidade AWS, região e configuração do State, o workflow seleciona `eks-autoflow`/`autoflow-homolog` ou `eks-autoflow-production`/`autoflow-production`. `AWS_TF_STATE_KEY` e `AWS_RDS_STATE_KEY` devem ser distintos; em produção, ambas as keys precisam começar por `production/`. Consulte [Operação de CI/CD](../.github/CI-CD-AWS.md) para os gates, checks do bucket e ordem de deploy.
+Configure os Environments `homolog` e `production`, limitando deployments a `develop` e `main`. Não cadastre `EKS_CLUSTER_NAME` nem `API_GATEWAY_ORIGIN`: após validar a identidade AWS, região e configuração do State, o workflow seleciona `eks-autoflow`/`autoflow-homolog` ou `eks-autoflow-production`/`autoflow-production`. `AWS_TF_STATE_KEY` e `AWS_RDS_STATE_KEY` devem ser distintos e começar por `homolog/` ou `production/` conforme o Environment; os sufixos são externos. Consulte [Operação de CI/CD](../.github/CI-CD-AWS.md) para os gates, checks do bucket e ordem de deploy.
 
 ### Secrets
 
@@ -32,8 +32,8 @@ Configure os Environments `homolog` e `production`, limitando deployments a `dev
 | `AWS_REGION` | Variable; região AWS | GitHub Environment Variable de cada ambiente; atualmente `us-east-1` | CD | `us-east-1` | `pipeline.yml`; obrigatória, validada antes da descoberta. |
 | `AWS_EXPECTED_ACCOUNT_ID` | Variable; conta permitida pelo guard | GitHub Environment Variable; ID da conta de destino | CD | Não incluir valor de conta em documentação | Workflow/script guard; obrigatório, validado como 12 dígitos e comparado à identidade AWS. |
 | `AWS_TERRAFORM_STATE_BUCKET` | Variable; bucket S3 do ambiente | GitHub Environment Variable; bucket pertencente à conta esperada | CD | Não aplicável | Workflow/Terraform; obrigatório; owner é conferido antes de inicializar o backend. |
-| `AWS_TF_STATE_KEY` | Variable; key S3 do State da aplicação | GitHub Environment Variable; key exclusiva do ambiente/root | CD | `production/application/autoflow/terraform.tfstate` | Workflow/Terraform; obrigatória; produção deve usar prefixo `production/`. |
-| `AWS_RDS_STATE_KEY` | Variable; key S3 do State RDS consumido pela aplicação | GitHub Environment Variable; deve corresponder ao State RDS do mesmo ambiente | CD | `production/rds/terraform.tfstate` | Mapeada a `TF_VAR_rds_state_key`; obrigatória, distinta de `AWS_TF_STATE_KEY` e isolada por ambiente. |
+| `AWS_TF_STATE_KEY` | Variable; key S3 do State da aplicação | Obrigatória no GitHub Environment selecionado; sufixo fornecido externamente | CD | Prefixo `homolog/` ou `production/`, com sufixo externo | Workflow/Terraform; sem default, exclusiva do root e distinta das demais keys no bucket. |
+| `AWS_RDS_STATE_KEY` | Variable; key S3 do State RDS consumido pela aplicação | Obrigatória no GitHub Environment selecionado; deve corresponder ao State RDS do mesmo ambiente | CD | Prefixo `homolog/` ou `production/`, com sufixo externo | Mapeada a `TF_VAR_rds_state_key`; sem default, igual à key do produtor RDS e distinta da key da aplicação. |
 | `DOCKERHUB_USERNAME` | Variable; namespace Docker Hub | GitHub Repository Variable compartilhada | Push `develop` e `main` | `usuario-exemplo` | Namespace das imagens; sem default. Tags são sempre `${{ github.sha }}`. |
 | `API_GATEWAY_CORS_ORIGINS` | Variable; allowlist CORS | GitHub Environment Variable de cada ambiente; lista JSON exata | CD | `[]` | Workflow/Terraform; obrigatória; deve ser array JSON. O endpoint HTTPS é descoberto da API do ambiente. |
 | `TERRAFORM_APPLY_APPROVAL_CONFIGURED` | Variable; guard suplementar de aprovação | GitHub Environment Variable; `true` somente após configurar Required reviewers efetivos no mesmo Environment | CD | `true` | Ausente/diferente bloqueia Apply. Não substitui a proteção do Environment. |
@@ -49,7 +49,7 @@ Os inputs são passados por `TF_VAR_*` no processo Terraform, não são GitHub V
 | `project_name` | Opcional; `autoflow` | Prefixo de recursos; configuração local. |
 | `region_default` | Opcional; `us-east-1` | Região provider; workflow injeta `AWS_REGION`. |
 | `terraform_state_bucket` | Obrigatório; sem default | Bucket de states; `AWS_TERRAFORM_STATE_BUCKET`. |
-| `rds_state_key` | Opcional; `rds/terraform.tfstate` | State remoto RDS; workflow injeta `AWS_RDS_STATE_KEY`. |
+| `rds_state_key` | Obrigatória; sem default | State remoto RDS; workflow injeta `AWS_RDS_STATE_KEY` do mesmo Environment. |
 | `cidr_vpc` | Opcional; `10.0.0.0/16` | CIDR VPC; configuração local. |
 | `instance_type` | Opcional; `t3.medium` | Tipo de instância; configuração local. |
 | `dockerhub_username`, `backend_image_tag`, `frontend_image_tag` | Obrigatórios; sem defaults | Imagens de deploy; variables correspondentes do Environment. |

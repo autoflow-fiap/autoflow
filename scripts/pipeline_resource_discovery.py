@@ -61,11 +61,12 @@ def validate_state_configuration(
     if application_state_key == rds_state_key:
         raise DiscoveryError("A aplicação e o RDS devem usar Terraform States distintos.")
 
-    if deployment_environment == "production":
-        if not application_state_key.startswith("production/") or not rds_state_key.startswith("production/"):
-            raise DiscoveryError("As keys de produção devem usar o prefixo isolado production/.")
-    elif application_state_key.startswith("production/") or rds_state_key.startswith("production/"):
-        raise DiscoveryError("Homologação não pode usar keys Terraform de production.")
+    prefix = f"{deployment_environment}/"
+    if not application_state_key.startswith(prefix) or not rds_state_key.startswith(prefix):
+        raise DiscoveryError(f"As keys devem usar o prefixo obrigatório {prefix}.")
+    for key in (application_state_key, rds_state_key):
+        if any(part in {"", ".", ".."} for part in key.split("/")):
+            raise DiscoveryError("As keys Terraform devem ter segmentos de caminho válidos.")
 
 
 def validate_configuration() -> tuple[str, str]:

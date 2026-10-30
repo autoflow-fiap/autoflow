@@ -6,7 +6,7 @@ from terraform_plan_metadata import MetadataError, build_metadata
 BASE_ENV = {
     "AWS_REGION": "us-east-1",
     "TF_STATE_BUCKET": "autoflow-state-example",
-    "TF_STATE_KEY": "application/autoflow/terraform.tfstate",
+    "TF_STATE_KEY": "homolog/application-external.tfstate",
     "TF_VAR_backend_image_tag": "commit-a",
     "TF_VAR_gateway_cors_origins": "[]",
 }
@@ -33,7 +33,7 @@ class TerraformPlanMetadataTests(unittest.TestCase):
     def test_variable_backend_commit_or_lockfile_changes_invalidate_metadata(self):
         baseline = self.metadata()
         changed_var = dict(BASE_ENV, TF_VAR_backend_image_tag="commit-b")
-        changed_backend = dict(BASE_ENV, TF_STATE_KEY="application/other/terraform.tfstate")
+        changed_backend = dict(BASE_ENV, TF_STATE_KEY="homolog/another-external.tfstate")
         self.assertNotEqual(baseline["terraform_variables_sha256"], self.metadata(env=changed_var)["terraform_variables_sha256"])
         self.assertNotEqual(baseline["backend"], self.metadata(env=changed_backend)["backend"])
         self.assertNotEqual(baseline["commit_sha"], self.metadata(commit="b" * 40)["commit_sha"])

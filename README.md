@@ -141,8 +141,8 @@ internos/NodePort privados e a configuração Nginx do frontend.
 
 O root `infra/` usa backend S3 e recebe bucket e keys pelo GitHub Environment selecionado. `develop` implanta em
 `homolog`; `main` implanta em `production`. Cada ambiente aponta para a conta AWS, bucket e credenciais próprios.
-Quando os ambientes usam a mesma conta e bucket, suas keys precisam ser distintas. A key de produção usa o prefixo
-`production/`; a aplicação e o RDS sempre usam keys diferentes. O workflow verifica a identidade AWS esperada, a
+As keys começam por `homolog/` ou `production/` conforme o Environment e têm sufixos definidos externamente. Quando os
+ambientes usam a mesma conta e bucket, suas keys precisam ser distintas. A aplicação e o RDS sempre usam keys diferentes. O workflow verifica a identidade AWS esperada, a
 região, o owner do bucket e a separação das keys antes de inicializar Terraform.
 
 | Branch | GitHub Environment | Cluster EKS esperado | API Gateway HTTP esperada |

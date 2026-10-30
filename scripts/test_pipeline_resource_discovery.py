@@ -68,15 +68,19 @@ class PipelineResourceDiscoveryTests(unittest.TestCase):
 
     def test_state_keys_are_distinct_and_production_isolated_by_prefix(self):
         discovery.validate_state_configuration(
-            "homolog", "state-bucket", "application/autoflow/terraform.tfstate", "rds/terraform.tfstate"
+            "homolog", "state-bucket", "homolog/app.custom", "homolog/rds.custom"
         )
         discovery.validate_state_configuration(
-            "production", "state-bucket", "production/application/terraform.tfstate", "production/rds/terraform.tfstate"
+            "production", "state-bucket", "production/application.custom", "production/rds.custom"
         )
         with self.assertRaisesRegex(discovery.DiscoveryError, "States distintos"):
             discovery.validate_state_configuration("production", "state-bucket", "production/app.tfstate", "production/app.tfstate")
-        with self.assertRaisesRegex(discovery.DiscoveryError, "prefixo isolado"):
+        with self.assertRaisesRegex(discovery.DiscoveryError, "prefixo obrigatório production/"):
             discovery.validate_state_configuration("production", "state-bucket", "application/app.tfstate", "rds/rds.tfstate")
+        with self.assertRaisesRegex(discovery.DiscoveryError, "prefixo obrigatório homolog/"):
+            discovery.validate_state_configuration("homolog", "state-bucket", "app.tfstate", "homolog/rds.custom")
+        with self.assertRaises(discovery.DiscoveryError):
+            discovery.validate_state_configuration("homolog", "state-bucket", "homolog/app/../state", "homolog/rds.custom")
 
     def test_pull_requests_and_feature_branches_cannot_select_deploy_environment(self):
         for event, ref, environment in (
@@ -115,6 +119,34 @@ class PipelineResourceDiscoveryTests(unittest.TestCase):
             self.assertIn("--expected-bucket-owner \"$AWS_EXPECTED_ACCOUNT_ID\"", job)
             self.assertIn("pipeline_resource_discovery.py validate-config", job)
             self.assertIn("pipeline_resource_discovery.py discover", job)
+
+    def test_required_remote_state_key_has_no_legacy_default(self):
+        variables = (ROOT / "infra/vars.tf").read_text(encoding="utf-8")
+        key_variable = variables.split('variable "rds_state_key"', 1)[1].split("}", 1)[0]
+        self.assertNotIn("default", key_variable)
+        remote_state = (ROOT / "infra/data.tf").read_text(encoding="utf-8")
+        self.assertNotIn("expected_bucket_owner", remote_state)
+        for job_name, following_job in (("  deploy-plan:", "\n  deploy-apply:"), ("  deploy-apply:", "\n  smoke-tests:")):
+            job = WORKFLOW.split(job_name, 1)[1].split(following_job, 1)[0]
+            self.assertIn('aws s3api head-object --bucket "$TF_STATE_BUCKET" --key "$AWS_RDS_STATE_KEY" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID"', job)
+
+    def test_production_jobs_require_a_protected_main_branch(self):
+        for job_name, following_job in (
+            ("  docker-publish:", "\n  deploy-plan:"),
+            ("  deploy-plan:", "\n  deploy-apply:"),
+            ("  deploy-apply:", "\n  smoke-tests:"),
+        ):
+            job = WORKFLOW.split(job_name, 1)[1].split(following_job, 1)[0]
+            self.assertIn("github.ref != 'refs/heads/main' || github.ref_protected", job)
+
+    def test_deployment_keys_must_be_environment_scoped(self):
+        for job_name, following_job in (
+            ("  deploy-plan:", "\n  deploy-apply:"),
+            ("  deploy-apply:", "\n  smoke-tests:"),
+        ):
+            job = WORKFLOW.split(job_name, 1)[1].split(following_job, 1)[0]
+            self.assertIn("environments/$GITHUB_DEPLOYMENT_ENVIRONMENT/variables", job)
+            self.assertIn("AWS_TF_STATE_KEY AWS_RDS_STATE_KEY", job)
 
     def test_push_never_authorizes_destructive_terraform_operations(self):
         destructive_setting = "ALLOW_DESTRUCTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false' }}"

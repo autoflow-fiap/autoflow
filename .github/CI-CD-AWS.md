@@ -14,7 +14,7 @@ ordem operacional do deploy.
 Pull Requests executam CI, testes, builds, análises de segurança e validação Terraform local, sem credenciais AWS,
 Plan remoto ou Apply. Pushes para `feature/*` também executam apenas CI e build local das imagens. O `workflow_dispatch`
 pode ser iniciado em qualquer ref, mas os jobs privilegiados validam evento, branch e GitHub Environment: somente
-`develop`/`homolog` e `main`/`production` podem publicar imagens ou iniciar Plan/Apply. Dispatch em branch de trabalho
+`develop`/`homolog` e `main` protegida/`production` podem publicar imagens ou iniciar Plan/Apply. Dispatch em branch de trabalho
 permanece sem acesso a AWS e sem deploy. Smoke tests manuais são exclusivos de `develop`.
 
 O workflow existente `pr-automatico.yaml` abre um Pull Request para `develop` após push em qualquer branch diferente
@@ -29,7 +29,8 @@ ou substituições. A opção `allow_destructive` tem default `false` e só é c
 revisão do Plan e aprovação dos Required reviewers do Environment. O Apply revalida o mesmo Plan antes de aplicá-lo.
 
 Configure os GitHub Environments `homolog` e `production` com deployment restrito, respectivamente, a `develop` e
-`main`, e com Required reviewers efetivos. Defina `TERRAFORM_APPLY_APPROVAL_CONFIGURED=true` em cada Environment
+`main`, e com Required reviewers efetivos. O workflow exige `github.ref_protected` nos jobs production; configure
+externamente a proteção/ruleset de `main` e checks CI. Defina `TERRAFORM_APPLY_APPROVAL_CONFIGURED=true` em cada Environment
 somente depois de confirmar a regra no GitHub. A flag é um guard adicional; não substitui a proteção do Environment.
 O workflow também confirma a identidade dos reviewers configurados antes do Apply.
 
@@ -40,17 +41,20 @@ Cada job lê os Secrets e Variables do Environment selecionado. O guard compara 
 encerra o job. O workflow valida a região, confirma que o bucket S3 pertence à conta esperada e impede compartilhar a
 key da aplicação com a key de RDS.
 
-Configure `AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY` e `AWS_RDS_STATE_KEY` por Environment. A aplicação e o RDS
-devem apontar aos States do mesmo ambiente; produção usa keys sob `production/`, por exemplo
-`production/application/autoflow/terraform.tfstate` e `production/rds/terraform.tfstate`. Em homologação, mantenha as
-keys atualmente usadas pelos States operacionais. Se os ambientes estiverem na mesma conta/bucket, as keys de
-homologação e produção devem continuar distintas. Se estiverem em contas diferentes, cada Environment usa bucket e
-States da própria conta; não compartilhar bucket cross-account nem apontar produção a key de homologação.
+Configure `AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY` e `AWS_RDS_STATE_KEY` como Variables de cada Environment. As
+keys devem iniciar pelo prefixo obrigatório `homolog/` ou `production/`; seus sufixos são definidos externamente. A
+aplicação e o RDS devem apontar aos States do mesmo ambiente, com keys distintas. Se homolog e produção usarem o mesmo
+bucket, as seis keys dos roots precisam ser únicas nesse bucket; contas e buckets devem corresponder ao Environment.
+Não compartilhe bucket cross-account nem aponte produção a uma key de homologação. O workflow rejeita valores ausentes
+no Environment, mesmo que haja Repository Variables com o mesmo nome.
 
 A descoberta aceita outros clusters na mesma conta e região: seleciona somente o nome esperado para o branch. O API
 Gateway também é selecionado pelo nome do ambiente (`autoflow-homolog` ou `autoflow-production`). O root Terraform da
 aplicação recebe o endpoint HTTPS dessa API e `AWS_RDS_STATE_KEY` do Environment selecionado; não usa endpoint, cluster
-ou State de outro ambiente. Ambos os Environments mantêm `AWS_REGION=us-east-1`, conforme os roots atuais.
+ou State de outro ambiente. A região é fornecida pelo Environment e validada antes das operações AWS. O backend S3
+recebe o owner esperado do bucket. Terraform 1.16.5 não aceita `expected_bucket_owner` na configuração do data source
+embutido `terraform_remote_state`; por isso, o workflow valida o objeto RDS com `head-object --expected-bucket-owner`
+antes de inicializar o backend e ler os outputs remotos.
 
 Não configure nomes de cluster/API nem account IDs no repositório. Ao mudar a conta Learner Lab, atualize os Secrets e
 Variables daquele Environment, o bucket/keys de State e as roles/credenciais autorizadas; não é necessário alterar
