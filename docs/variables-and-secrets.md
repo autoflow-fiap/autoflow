@@ -30,7 +30,7 @@ Após reset do Learner Lab, reexecute as pipelines CI/CD correspondentes. Não r
 | Nome | Tipo / finalidade | Onde; origem | CI / CD | Exemplo seguro | Consumidor; default/ausência |
 |---|---|---|---|---|---|
 | `AWS_REGION` | Variable; região AWS | Repository Variable; região aprovada | CD | `us-east-1` | `pipeline.yml`; obrigatória, sem default. |
-| `AWS_EXPECTED_ACCOUNT_ID` | Variable; conta permitida pelo guard | Repository Variable; ID da conta alvo | CD | `123456789012` | Workflow/script guard; obrigatória, sem default. |
+| `AWS_EXPECTED_ACCOUNT_ID` | Variable; conta permitida pelo guard | Repository/Environment Variable; ID da conta alvo | CD | ID de 12 dígitos fornecido externamente | Workflow/script guard e `allowed_account_ids` do backend; obrigatória, sem default. |
 | `AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY` | Variables; bucket S3 e state da aplicação | Repository Variables; bucket/key existentes | CD | `autoflow-tfstate-homolog-exemplo`, `application/autoflow/terraform.tfstate` | Workflow/Terraform; obrigatórias, sem defaults. |
 | `DOCKERHUB_USERNAME` | Variable; namespace Docker Hub | GitHub Repository variable | Push `develop` | `usuario-exemplo` | Namespace das imagens; sem default. Tags são sempre `${{ github.sha }}`. |
 | `API_GATEWAY_CORS_ORIGINS` | Variable; allowlist CORS | Repository Variable; lista JSON exata | CD | `[]` | Workflow/Terraform; obrigatório; deve ser array JSON. O endpoint público é descoberto pela HTTP API do ambiente após validar conta e região AWS. |
@@ -40,12 +40,13 @@ Após reset do Learner Lab, reexecute as pipelines CI/CD correspondentes. Não r
 
 ## Terraform inputs
 
-Os inputs são passados por `TF_VAR_*` no processo Terraform, não são GitHub Variables por si só. Em deploy, o workflow mapeia os valores homólogos acima. Para execução local use Terraform/configuração local protegida.
+Os inputs são passados por `TF_VAR_*` no processo Terraform, não são GitHub Variables por si só. Em deploy, o workflow mapeia os valores homólogos acima. Para execução local use Terraform/configuração local protegida. `aws_allowed_account_ids` é obrigatório e também restringe o `terraform_remote_state` de RDS; o ID vem de `AWS_EXPECTED_ACCOUNT_ID`, nunca de valor versionado.
 
 | Input (`infra/vars.tf`) | Obrigatório / default | Finalidade e origem |
 |---|---|---|
 | `project_name` | Opcional; `autoflow` | Prefixo de recursos; configuração local. |
 | `region_default` | Opcional; `us-east-1` | Região provider; workflow injeta `AWS_REGION`. |
+| `aws_allowed_account_ids` | Obrigatório; lista não vazia de IDs de 12 dígitos | Workflow deriva de `AWS_EXPECTED_ACCOUNT_ID`; restringe provider, backend S3 e `terraform_remote_state`. |
 | `terraform_state_bucket` | Obrigatório; sem default | Bucket de states; `AWS_TERRAFORM_STATE_BUCKET`. |
 | `rds_state_key` | Opcional; `rds/terraform.tfstate` | State remoto RDS; workflow injeta `AWS_RDS_STATE_KEY`. |
 | `cidr_vpc` | Opcional; `10.0.0.0/16` | CIDR VPC; configuração local. |

@@ -44,7 +44,7 @@ Ordem operacional: VPC/EKS; RDS; Lambda e API Gateway HTTP; imagens e workloads 
 
 O root Terraform da aplicacao gerencia manifests Kubernetes. Spring Boot executa Flyway na inicializacao dos pods; as migrations precisam ser compativeis com a versao corrente da aplicacao. Aplicar primeiro mudancas de schema compativeis, depois a imagem; aguardar rollout/readiness antes dos smoke tests. Flyway coordena locking no banco; nao iniciar migrations concorrentes deliberadamente.
 
-Cada root Terraform usa state S3 exclusivo por ambiente e lock file. Keys consumidoras/produtoras devem coincidir para EKS, RDS, Lambda, API Gateway e aplicacao. Os workflows verificam bucket/keys antes de inicializar os roots que consomem states remotos.
+Cada root Terraform usa state S3 exclusivo por ambiente e lock file. Keys consumidoras/produtoras devem coincidir para EKS, RDS, Lambda, API Gateway e aplicacao. Os workflows verificam bucket/keys antes de inicializar os roots que consomem states remotos. `AWS_EXPECTED_ACCOUNT_ID` é configuração externa e alimenta `allowed_account_ids` tanto no `terraform init` quanto no `terraform_remote_state`; não use `expected_bucket_owner` em argumentos Terraform. `--expected-bucket-owner` permanece nas chamadas AWS CLI que fazem verificação de ownership. Os comandos locais seguros estão no [README](../README.md#terraform-na-aws).
 
 ## GitHub Secrets
 

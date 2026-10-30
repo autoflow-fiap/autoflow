@@ -139,11 +139,29 @@ o ALB interno, IAM e os recursos compartilhados pertencem ao repositório
 [autoflow-infra](https://github.com/autoflow-fiap/autoflow-infra). Este repositório gerencia Deployments, Services
 internos/NodePort privados e a configuração Nginx do frontend.
 
-O state do root `infra/` usa a key S3 `application/autoflow/terraform.tfstate`. Configure o bucket e a key aprovados
-por variáveis do ambiente; o workflow confirma que o objeto remoto existe antes do Terraform. O backend exige
-`AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY`, `AWS_RDS_STATE_KEY` e
+O state do root `infra/` usa a key S3 externa `AWS_TF_STATE_KEY`; configure bucket e keys distintos em cada Environment.
+O workflow valida os states antes do Terraform. `AWS_EXPECTED_ACCOUNT_ID`, fornecido pela configuração externa,
+alimenta `TF_VAR_aws_allowed_account_ids`, que restringe o backend S3 e o `terraform_remote_state` de RDS. O backend
+mantém `encrypt=true` e `use_lockfile=true`. Para validação local, configure as variáveis externamente e use:
+
+```bash
+terraform -chdir=infra init -input=false -reconfigure \
+  -backend-config="bucket=$AWS_TERRAFORM_STATE_BUCKET" \
+  -backend-config="key=$AWS_TF_STATE_KEY" \
+  -backend-config="region=$AWS_REGION" \
+  -backend-config="allowed_account_ids=$TF_VAR_aws_allowed_account_ids" \
+  -backend-config="encrypt=true" \
+  -backend-config="use_lockfile=true"
+terraform -chdir=infra validate
+```
+
+`TF_VAR_aws_allowed_account_ids` deve conter uma lista JSON com a conta esperada, por exemplo usando apenas a variável
+externa `AWS_EXPECTED_ACCOUNT_ID`; não fixe IDs no repositório. O comando `terraform init -backend=false -input=false`
+é a opção de CI sem acesso ao backend remoto. O backend exige `AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY`, `AWS_RDS_STATE_KEY` e
 `API_GATEWAY_CORS_ORIGINS`. A origem HTTPS é consultada automaticamente na API Gateway recriada; a API de negócio e o frontend são publicados nessa mesma origem; não há
 Ingress, plugin ou upstream Kong na arquitetura de aplicação.
+
+Para a validação local sem AWS, execute `terraform -chdir=infra init -backend=false -input=false`, `terraform -chdir=infra validate` e `python -m unittest discover -s scripts -p "test_terraform_backend_config.py" -v`. O teste inspeciona os comandos de init do workflow e a allowlist dos states remotos.
 
 Para a configuração por nome de GitHub Actions, Terraform, runtime e Kubernetes, consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md) e o [histórico](docs/variables-changelog.md). Esta seção descreve a operação do Secret Kubernetes; a documentação operacional do pipeline permanece em [CI-CD-AWS.md](.github/CI-CD-AWS.md).
 

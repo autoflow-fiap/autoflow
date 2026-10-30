@@ -102,6 +102,8 @@ jobs:
         with:
           terraform_version: "1.16.5"
           terraform_wrapper: false
+      - name: Validar contrato do backend S3 sem credenciais AWS
+        run: python -m unittest discover -s scripts -p "test_terraform_backend_config.py" -v
       - name: Verificar formatação Terraform
         run: terraform fmt -check -recursive infra
       - name: Validar configuração em backend isolado
@@ -309,6 +311,7 @@ jobs:
             -backend-config="bucket=$TF_STATE_BUCKET" \
             -backend-config="key=$TF_STATE_KEY" \
             -backend-config="region=$AWS_REGION" \
+            -backend-config="allowed_account_ids=$TF_VAR_aws_allowed_account_ids" \
             -backend-config="encrypt=true" \
             -backend-config="use_lockfile=true"
           terraform validate
@@ -465,6 +468,7 @@ jobs:
             -backend-config="bucket=$TF_STATE_BUCKET" \
             -backend-config="key=$TF_STATE_KEY" \
             -backend-config="region=$AWS_REGION" \
+            -backend-config="allowed_account_ids=$TF_VAR_aws_allowed_account_ids" \
             -backend-config="encrypt=true" \
             -backend-config="use_lockfile=true"
           terraform validate
