@@ -150,10 +150,11 @@ class EndpointTests(unittest.TestCase):
         from pathlib import Path
         workflow = Path(__file__).parents[1] / ".github/workflows/pipeline.yml"
         text = workflow.read_text(encoding="utf-8")
-        self.assertIn("group: autoflow-eks-endpoint-access", text)
+        self.assertIn("group: autoflow-eks-endpoint-access-${{ github.ref }}", text)
         self.assertNotIn("group: autoflow-application-${{ github.ref }}", text)
         self.assertIn("cancel-in-progress: false", text)
-        self.assertEqual(text.count("EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow.json"), 2)
+        environment_lease = "EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow-${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}.json"
+        self.assertEqual(text.count(environment_lease), 2)
         self.assertNotIn("self-hosted", text)
         self.assertIn("workflow_dispatch", text)
 
