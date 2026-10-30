@@ -106,6 +106,30 @@ class ApplyNewRelicLicenseSecretTests(unittest.TestCase):
         self.assertEqual(kube.call_count, 2)
         self.assertNotIn(self.value, str(output.call_args_list))
 
+    def test_production_license_is_synchronized_when_apm_is_enabled(self):
+        self.env["GITHUB_DEPLOYMENT_ENVIRONMENT"] = "production"
+        result, aws_factory, kube, output = self.invoke()
+        self.assertEqual(result, 0)
+        aws_factory.assert_called_once_with("secretsmanager", region_name="us-east-1")
+        self.assertEqual(kube.call_count, 2)
+        self.assertNotIn(self.value, str(output.call_args_list))
+
+    def test_production_can_leave_apm_disabled(self):
+        self.env["GITHUB_DEPLOYMENT_ENVIRONMENT"] = "production"
+        self.env["ENABLE_NEWRELIC_APM"] = "false"
+        self.env.pop("NEW_RELIC_LICENSE_SECRET_ID")
+        with patch.dict(os.environ, self.env, clear=True), patch("boto3.client") as aws, patch.object(sync.subprocess, "run") as kube:
+            self.assertEqual(sync.main([]), 0)
+        aws.assert_not_called()
+        kube.assert_not_called()
+
+    def test_unknown_environment_blocks_sync(self):
+        self.env["GITHUB_DEPLOYMENT_ENVIRONMENT"] = "development"
+        with patch.dict(os.environ, self.env, clear=True), patch("boto3.client") as aws, patch.object(sync.subprocess, "run") as kube:
+            self.assertEqual(sync.main([]), 2)
+        aws.assert_not_called()
+        kube.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

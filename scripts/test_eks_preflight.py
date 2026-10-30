@@ -89,7 +89,7 @@ class PreflightTests(unittest.TestCase):
         self.assertIn(selected_environment, plan)
         self.assertIn(selected_environment, apply)
         self.assertIn("github.event_name == 'push'", plan)
-        self.assertIn("EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow.json", plan)
+        self.assertIn("EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow-${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}.json", plan)
         self.assertIn("eks_endpoint_access.py authorize", plan)
         for orphaned_resource in (
             "kubectl get deployment autoflow-backend",
@@ -119,9 +119,9 @@ class PreflightTests(unittest.TestCase):
         self.assertIn("terraform apply -input=false infra.tfplan", apply)
         self.assertNotIn("terraform plan", apply)
         self.assertIn("allow_destructive", content)
-        push_authorization = "ALLOW_DESTRUCTIVE: ${{ github.event_name == 'push' && 'true' || (github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false') }}"
-        self.assertIn(push_authorization, plan)
-        self.assertIn(push_authorization, apply)
+        dispatch_authorization = "ALLOW_DESTRUCTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false' }}"
+        self.assertIn(dispatch_authorization, plan)
+        self.assertIn(dispatch_authorization, apply)
         self.assertIn("review_terraform_plan.py", apply)
         self.assertIn("kubectl rollout status deployment/autoflow-backend", apply)
         self.assertNotIn("smoke_api_gateway.py", apply)

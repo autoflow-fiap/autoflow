@@ -1,5 +1,10 @@
 from pathlib import Path
+import json
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 
 
@@ -21,6 +26,62 @@ def remote_init_commands():
 
 
 class TerraformBackendConfigTests(unittest.TestCase):
+    def test_terraform_1_16_5_rejects_expected_bucket_owner_without_aws(self):
+        terraform = shutil.which("terraform")
+        self.assertIsNotNone(terraform, "Terraform 1.16.5 precisa estar instalado para este teste.")
+        version = subprocess.run(
+            [terraform, "version", "-json"], capture_output=True, text=True, check=True
+        )
+        self.assertEqual(json.loads(version.stdout)["terraform_version"], "1.16.5")
+
+        with tempfile.TemporaryDirectory(prefix="autoflow-s3-backend-compat-") as directory:
+            root = Path(directory)
+            (root / "main.tf").write_text(
+                'terraform {\n  required_version = "= 1.16.5"\n  backend "s3" {}\n}\n',
+                encoding="utf-8",
+            )
+            environment = os.environ.copy()
+            for name in (
+                "AWS_ACCESS_KEY_ID",
+                "AWS_SECRET_ACCESS_KEY",
+                "AWS_SESSION_TOKEN",
+                "AWS_PROFILE",
+            ):
+                environment.pop(name, None)
+            environment.update(
+                {
+                    "AWS_CONFIG_FILE": str(root / "no-aws-config"),
+                    "AWS_SHARED_CREDENTIALS_FILE": str(root / "no-aws-credentials"),
+                    "AWS_EC2_METADATA_DISABLED": "true",
+                    "AWS_ENDPOINT_URL": "http://127.0.0.1:9",
+                    "AWS_ENDPOINT_URL_S3": "http://127.0.0.1:9",
+                    "TF_DATA_DIR": str(root / ".terraform"),
+                }
+            )
+            result = subprocess.run(
+                [
+                    terraform,
+                    "init",
+                    "-input=false",
+                    "-no-color",
+                    "-backend-config=bucket=autoflow-backend-compatibility-test",
+                    "-backend-config=key=compatibility/test.tfstate",
+                    "-backend-config=region=us-east-1",
+                    "-backend-config=expected_bucket_owner=not-a-real-account-id",
+                    "-backend-config=encrypt=true",
+                    "-backend-config=use_lockfile=true",
+                ],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            output = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, output)
+            self.assertIn("expected_bucket_owner", output)
+            self.assertRegex(output, r"Invalid backend configuration argument|Unsupported argument")
+
     def test_s3_backend_blocks_do_not_declare_unsupported_arguments(self):
         backend_files = []
         for terraform_file in (ROOT / "infra").rglob("*.tf"):

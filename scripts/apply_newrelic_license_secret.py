@@ -40,6 +40,8 @@ def validate_configuration() -> tuple[bool, str | None, str, str, str]:
     if enabled not in {"true", "false"}:
         raise ConfigurationError("ENABLE_NEWRELIC_APM deve ser true ou false.")
     deployment_environment = required_environment("GITHUB_DEPLOYMENT_ENVIRONMENT")
+    if deployment_environment not in {"homolog", "production"}:
+        raise ConfigurationError("GITHUB_DEPLOYMENT_ENVIRONMENT deve ser homolog ou production.")
     region = required_environment("AWS_REGION")
     if re.fullmatch(r"[a-z]{2}(?:-gov)?-[a-z]+-[0-9]+", region) is None:
         raise ConfigurationError("AWS_REGION deve identificar uma região AWS válida.")

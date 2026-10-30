@@ -14,7 +14,6 @@ variable "terraform_state_bucket" {
 variable "rds_state_key" {
   description = "Chave do state Terraform do RDS no bucket externo."
   type        = string
-  default     = "rds/terraform.tfstate"
 }
 
 variable "cidr_vpc" {
