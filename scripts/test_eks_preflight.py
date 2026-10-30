@@ -89,7 +89,7 @@ class PreflightTests(unittest.TestCase):
         self.assertIn(selected_environment, plan)
         self.assertIn(selected_environment, apply)
         self.assertIn("github.event_name == 'push'", plan)
-        self.assertIn("EKS_LEASE_KEY: ci/eks-endpoint-lease.json", plan)
+        self.assertIn("EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow.json", plan)
         self.assertIn("eks_endpoint_access.py authorize", plan)
         for orphaned_resource in (
             "kubectl get deployment autoflow-backend",
