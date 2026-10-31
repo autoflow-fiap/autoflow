@@ -71,6 +71,24 @@ ou State de outro ambiente. A região é fornecida pelo Environment e validada a
 verificações de ownership do bucket e do objeto RDS usam `head-bucket`/`head-object --expected-bucket-owner` pela AWS CLI
 antes de inicializar o backend e ler os outputs remotos; esse argumento não é passado ao Terraform.
 
+### Lease durável do endpoint EKS
+
+Os jobs `deploy-plan` e `deploy-apply` usam `EKS_LEASE_BUCKET` igual a `AWS_TERRAFORM_STATE_BUCKET` e uma key
+separada por ambiente: `ci/eks-endpoint-lease-autoflow-homolog.json` ou
+`ci/eks-endpoint-lease-autoflow-production.json`. As credenciais temporárias `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY` e `AWS_SESSION_TOKEN` são configuradas antes do acesso ao S3. O workflow valida o proprietário
+do bucket com `AWS_EXPECTED_ACCOUNT_ID` antes de ler, gravar ou remover o lease.
+
+Conceda ao principal dos jobs `s3:ListBucket` no bucket e `s3:GetObject`, `s3:PutObject` e `s3:DeleteObject` nas keys
+do lease. `s3:ListBucket` permite distinguir uma key ausente (`NoSuchKey`/404) de falha de autorização; `AccessDenied`,
+`ExpiredToken`, falhas de rede e erros desconhecidos encerram o job sem tratar o lease como ausente. Se houver SSE-KMS,
+avalie também `kms:Decrypt` e `kms:GenerateDataKey` na policy IAM e na key policy.
+
+O conteúdo do lease é validado antes da reconciliação. Escritas usam `If-None-Match: *`, recusando sobrescrever um lease
+existente; leases inválidos não alteram o endpoint. A restauração remove apenas o CIDR temporário, repõe a allowlist
+original e preserva CIDRs externos adicionados posteriormente. O workflow serializa execuções por ref; não remova esse
+controle nem o armazenamento persistente do lease.
+
 Não configure nomes de cluster/API nem account IDs no repositório. Ao mudar a conta AWS, atualize os Secrets e Variables
 daquele Environment, o bucket/keys de State e as roles/credenciais autorizadas. A mudança de conta não concede
 permissões IAM nem quotas; prepare esses recursos antes do deployment.

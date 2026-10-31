@@ -13,6 +13,32 @@ import time
 UPDATE_RETRIES = 3
 UPDATE_WAIT_ATTEMPTS = 60
 UPDATE_WAIT_SECONDS = 10
+S3_OPERATION_TIMEOUT_SECONDS = 30
+AWS_ERROR_PATTERN = re.compile(r"An error occurred \(([^)]+)\) when calling (?:the )?([A-Za-z0-9]+) operation")
+PERMANENT_CIDR = "189.6.8.245/32"
+SAFE_AWS_ERROR_CODES = {
+    "AccessDenied", "AccessDeniedException", "403", "Forbidden",
+    "ExpiredToken", "ExpiredTokenException", "InvalidToken", "InvalidAccessKeyId",
+    "SignatureDoesNotMatch", "NoSuchKey", "404", "NotFound", "NoSuchBucket",
+    "PreconditionFailed", "ConditionalRequestConflict", "InternalError", "ServiceUnavailable",
+    "SlowDown", "RequestTimeout",
+}
+NETWORK_ERROR_MARKERS = (
+    "could not connect to the endpoint url",
+    "connection was closed",
+    "connection timed out",
+    "timed out",
+    "timeout",
+    "temporary failure in name resolution",
+    "name or service not known",
+    "failed to resolve",
+    "getaddrinfo failed",
+    "failed to establish a new connection",
+    "ssl validation failed",
+    "connection reset by peer",
+    "network is unreachable",
+    "read timed out",
+)
 
 
 class AwsOperationError(RuntimeError):
@@ -90,36 +116,162 @@ def update_and_wait(cluster, region, cidrs, merge_current):
 
 
 def location():
-    bucket, key = os.environ.get("EKS_LEASE_BUCKET"), os.environ.get("EKS_LEASE_KEY")
+    bucket = os.environ.get("EKS_LEASE_BUCKET", "").strip()
+    key = os.environ.get("EKS_LEASE_KEY", "").strip()
     if not bucket or not key:
         raise RuntimeError("Configure EKS_LEASE_BUCKET e EKS_LEASE_KEY para a reconciliação durável")
-    return bucket, key
+    owner = os.environ.get("AWS_EXPECTED_ACCOUNT_ID", "").strip()
+    if re.fullmatch(r"[0-9]{12}", owner) is None:
+        raise RuntimeError("AWS_EXPECTED_ACCOUNT_ID deve conter exatamente 12 dígitos para acessar o lease S3")
+    return bucket, key, owner
+
+
+def aws_error(stderr):
+    match = AWS_ERROR_PATTERN.search(stderr or "")
+    if match:
+        code = match.group(1)
+        if code not in SAFE_AWS_ERROR_CODES:
+            code = "UnknownAWSException"
+        return code, match.group(2)
+    return None, None
+
+
+def lease_operation_error(action, stderr, permissions):
+    code, _operation = aws_error(stderr)
+    if code in {"AccessDenied", "AccessDeniedException", "403", "Forbidden"}:
+        return (
+            f"Acesso negado ao S3 (AWS {code}) ao {action} o lease; verifique credenciais temporárias, bucket policy e "
+            f"permissões {permissions} (e kms:Decrypt se o bucket usar SSE-KMS)."
+        )
+    if code in {"ExpiredToken", "ExpiredTokenException", "InvalidToken"}:
+        return (
+            f"Credenciais AWS temporárias inválidas ou expiradas (AWS {code}) ao {action} o lease; renove "
+            "AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e AWS_SESSION_TOKEN no Environment."
+        )
+    message = (stderr or "").lower()
+    if any(marker in message for marker in NETWORK_ERROR_MARKERS):
+        return f"Falha de rede ou endpoint ao {action} o lease no S3; verifique conectividade e região AWS."
+    if code:
+        return f"Falha ao {action} o lease no S3 (AWS {code}); lease e CIDRs foram mantidos sem alteração."
+    return f"Falha ao {action} o lease no S3 sem resposta AWS identificável; verifique credenciais e conectividade."
+
+
+def run_s3_operation(action, arguments, permissions):
+    try:
+        result = subprocess.run(
+            ["aws", "s3api", *arguments, "--output", "json"],
+            capture_output=True,
+            text=True,
+            timeout=S3_OPERATION_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"Tempo limite ao {action} o lease no S3; lease e CIDRs foram mantidos.") from None
+    except OSError:
+        raise RuntimeError(f"Não foi possível iniciar a AWS CLI ao {action} o lease no S3.") from None
+    if result.returncode:
+        raise RuntimeError(lease_operation_error(action, result.stderr, permissions))
+    return result
+
+
+def validate_lease_document(lease):
+    expected_keys = {"temporary_cidr", "original_cidrs"}
+    if not isinstance(lease, dict) or set(lease) != expected_keys:
+        raise RuntimeError("Lease EKS S3 malformado ou desconhecido; mantendo objeto e CIDRs sem alteração.")
+
+    temporary_cidr = lease.get("temporary_cidr")
+    original_cidrs = lease.get("original_cidrs")
+    if not isinstance(temporary_cidr, str) or not isinstance(original_cidrs, list):
+        raise RuntimeError("Lease EKS S3 malformado ou desconhecido; mantendo objeto e CIDRs sem alteração.")
+    try:
+        temporary_network = ipaddress.ip_network(temporary_cidr, strict=True)
+        original_networks = [ipaddress.ip_network(value, strict=True) for value in original_cidrs]
+    except (TypeError, ValueError):
+        raise RuntimeError("Lease EKS S3 malformado ou desconhecido; mantendo objeto e CIDRs sem alteração.") from None
+    if (
+        temporary_network.version != 4
+        or temporary_network.prefixlen != 32
+        or str(temporary_network) != temporary_cidr
+        or any(str(network) != value for network, value in zip(original_networks, original_cidrs))
+        or len(set(original_cidrs)) != len(original_cidrs)
+        or PERMANENT_CIDR not in original_cidrs
+    ):
+        raise RuntimeError("Lease EKS S3 malformado ou desconhecido; mantendo objeto e CIDRs sem alteração.")
+    return {"temporary_cidr": temporary_cidr, "original_cidrs": original_cidrs}
 
 
 def load_lease():
-    bucket, key = location()
-    result = subprocess.run(["aws", "s3", "cp", f"s3://{bucket}/{key}", "-"], capture_output=True, text=True)
-    if result.returncode:
-        if any(marker in result.stderr for marker in ("404", "Not Found", "NoSuchKey")):
-            return None
-        raise RuntimeError("Falha ao ler lease persistido do endpoint EKS")
-    return json.loads(result.stdout)
+    bucket, key, owner = location()
+    with tempfile.NamedTemporaryFile(delete=False) as stream:
+        path = stream.name
+    try:
+        try:
+            result = subprocess.run(
+                [
+                    "aws", "s3api", "get-object", "--bucket", bucket, "--key", key,
+                    "--expected-bucket-owner", owner, path, "--output", "json",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=S3_OPERATION_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Tempo limite ao ler lease do S3; lease e CIDRs foram mantidos.") from None
+        except OSError:
+            raise RuntimeError("Não foi possível iniciar a AWS CLI ao ler lease do S3.") from None
+        if result.returncode:
+            code, operation = aws_error(result.stderr)
+            if operation == "GetObject" and code in {"NoSuchKey", "404", "NotFound"}:
+                return None
+            raise RuntimeError(lease_operation_error("ler", result.stderr, "s3:GetObject e s3:ListBucket"))
+        try:
+            with open(path, encoding="utf-8") as lease_file:
+                return validate_lease_document(json.load(lease_file))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise RuntimeError("Lease EKS S3 malformado ou desconhecido; mantendo objeto e CIDRs sem alteração.") from None
+    finally:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
 
 
 def save_lease(lease):
-    bucket, key = location()
+    bucket, key, owner = location()
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False) as stream:
         json.dump(lease, stream)
         path = stream.name
     try:
-        subprocess.run(["aws", "s3", "cp", path, f"s3://{bucket}/{key}"], check=True, capture_output=True, text=True)
+        try:
+            result = subprocess.run(
+                [
+                    "aws", "s3api", "put-object", "--bucket", bucket, "--key", key,
+                    "--body", path, "--expected-bucket-owner", owner,
+                    "--if-none-match", "*", "--output", "json",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=S3_OPERATION_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Tempo limite ao gravar lease no S3; CIDRs não foram alterados.") from None
+        except OSError:
+            raise RuntimeError("Não foi possível iniciar a AWS CLI ao gravar lease no S3.") from None
+        if result.returncode:
+            code, _operation = aws_error(result.stderr)
+            if code in {"PreconditionFailed", "ConditionalRequestConflict"}:
+                raise RuntimeError("Lease EKS S3 já existe; recusada a sobrescrita de lease ativo ou desconhecido.")
+            raise RuntimeError(lease_operation_error("gravar", result.stderr, "s3:PutObject"))
     finally:
         os.unlink(path)
 
 
 def remove_lease():
-    bucket, key = location()
-    subprocess.run(["aws", "s3", "rm", f"s3://{bucket}/{key}"], check=True, capture_output=True, text=True)
+    bucket, key, owner = location()
+    run_s3_operation(
+        "remover",
+        ["delete-object", "--bucket", bucket, "--key", key, "--expected-bucket-owner", owner],
+        "s3:DeleteObject",
+    )
 
 
 def cleanup(cluster, region, lease):
@@ -137,7 +289,7 @@ def cleanup(cluster, region, lease):
 
 def reconcile(cluster, region):
     lease = load_lease()
-    if lease:
+    if lease is not None:
         cleanup(cluster, region, lease)
 
 
@@ -145,8 +297,8 @@ def authorize(cluster, region, ip):
     cidr = str(ipaddress.ip_network(ip + "/32", strict=True))
     reconcile(cluster, region)
     current = set(config(cluster, region)["publicAccessCidrs"])
-    if "189.6.8.245/32" not in current:
-        raise RuntimeError("CIDR permanente 189.6.8.245/32 ausente; operação bloqueada")
+    if PERMANENT_CIDR not in current:
+        raise RuntimeError(f"CIDR permanente {PERMANENT_CIDR} ausente; operação bloqueada")
     if "0.0.0.0/0" in current:
         raise RuntimeError("CIDR público irrestrito não permitido; operação bloqueada")
     lease = {"temporary_cidr": cidr, "original_cidrs": sorted(current)}
