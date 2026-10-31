@@ -22,10 +22,35 @@ def request(base, path, method="GET", body=None, headers=None):
         return response.status, response.headers, response.read()
 
 
-def check(condition, label):
+def check(condition, label, diagnostics=None):
     if not condition:
-        raise RuntimeError("FALHOU: " + label)
-    print("OK: " + label)
+        suffix = " — " + diagnostics if diagnostics else ""
+        raise RuntimeError("FALHOU: " + label + suffix)
+    suffix = " — " + diagnostics if diagnostics else ""
+    print("OK: " + label + suffix)
+
+
+def response_diagnostics(status, headers, body, expected_status):
+    """Retorna metadados seguros da resposta, sem registrar conteúdo ou headers arbitrários."""
+    details = [f"HTTP {status}", f"esperado HTTP {expected_status}"]
+    header_values = {str(name).lower(): str(value) for name, value in headers.items()}
+
+    content_type = header_values.get("content-type", "").split(";", 1)[0].strip()
+    if re.fullmatch(r"[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+", content_type):
+        details.append("content-type=" + content_type)
+
+    details.append(f"response-bytes={len(body)}")
+    safe_headers = {
+        "x-amzn-requestid": "apigw-request-id",
+        "x-amz-apigw-id": "apigw-id",
+        "x-amzn-errortype": "aws-error-type",
+    }
+    for header, label in safe_headers.items():
+        value = header_values.get(header, "").strip()
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/=+-]{0,127}", value):
+            details.append(f"{label}={value}")
+
+    return "; ".join(details)
 
 
 def parse_cors_origins(value):
@@ -118,8 +143,13 @@ def smoke(base, cors_origins=None, login_only=False):
         status, _, body = request(base, "/auth/login", "POST", {"cpf_cnpj": document, "senha": password})
         check(status == 200, "login de cliente fictício ativo via Lambda")
         token = json.loads(body)["token"]
-        status, _, _ = request(base, "/api/clientes/me/ordens-servico", headers={"Authorization": "Bearer " + token})
-        check(status == 200, "cliente fictício autenticado consulta negócio/RDS")
+        status, headers, body = request(
+            base,
+            "/api/clientes/me/ordens-servico",
+            headers={"Authorization": "Bearer " + token},
+        )
+        check(status == 200, "GET /api/clientes/me/ordens-servico com JWT de cliente fictício",
+              response_diagnostics(status, headers, body, expected_status=200))
     else:
         print("PENDENTE: login válido e consulta exigem AUTOFLOW_TEST_CPF_CNPJ e AUTOFLOW_TEST_PASSWORD de cliente fictício ATIVO")
 
