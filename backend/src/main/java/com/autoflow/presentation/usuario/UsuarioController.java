@@ -55,7 +55,7 @@ public class UsuarioController {
     @ApiResponse(responseCode = "404", description = "Usuário não encontrado")
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
-        LoginInput input = new LoginInput(request.email(), request.senha());
+        LoginInput input = new LoginInput(request.cpfCnpj(), request.senha());
         LoginOutput output = loginUsuarioUseCase.execute(input);
         return new LoginResponse(output.token());
 

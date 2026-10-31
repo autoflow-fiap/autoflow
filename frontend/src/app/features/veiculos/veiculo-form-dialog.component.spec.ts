@@ -18,7 +18,7 @@ describe('VeiculoFormDialogComponent', () => {
 
   const clienteResumo = { id: 1, nome: 'Cliente Teste', cpfCnpj: '123.456.789-00', telefone: '11999999999', email: 'cliente@teste.com' };
   const veiculoExistente: VeiculoResponse = { id: 1, marca: 'Fiat', ano: 2020, placa: 'ABC1D23', modelo: 'Uno', cliente: clienteResumo };
-  const perfilCliente: ClienteResponse = { id: 1, nome: 'Cliente Teste', cpfCnpj: '12345678900', telefone: '11999999999', email: 'cliente@teste.com', veiculos: [] };
+  const perfilCliente: ClienteResponse = { id: 1, nome: 'Cliente Teste', cpfCnpj: '12345678900', telefone: '11999999999', email: 'cliente@teste.com', status: 'ATIVO', veiculos: [] };
 
   function criarComponente(data: VeiculoFormDialogData, role: string | null = 'ADMIN'): VeiculoFormDialogComponent {
     mockAuth.getRole.and.returnValue(role);

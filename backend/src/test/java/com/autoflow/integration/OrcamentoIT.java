@@ -37,14 +37,9 @@ class OrcamentoIT extends AbstractIT {
 
         adminToken = registrarELogar(TestUtils.EMAIL_ADMIN, TestUtils.CPF_ATENDENTE, "ADMIN");
 
-        registrarELogar(TestUtils.EMAIL_MECANICO, TestUtils.CPF_MECANICO, "MECANICO");
+        String mecanicoToken = registrarELogar(TestUtils.EMAIL_MECANICO, TestUtils.CPF_MECANICO, "MECANICO");
         mecanicoId = jdbcTemplate.queryForObject(
                 "SELECT id FROM usuarios WHERE email = ?", Long.class, TestUtils.EMAIL_MECANICO);
-
-        ResponseEntity<String> mecLogin = restTemplate.postForEntity("/auth/login", jsonEntity(
-                Map.of("email", TestUtils.EMAIL_MECANICO, "senha", TestUtils.SENHA_PADRAO)
-        ), String.class);
-        String mecanicoToken = extrairCampo(mecLogin.getBody(), "token");
 
         clienteToken = registrarELogar(TestUtils.EMAIL_CLIENTE, TestUtils.CPF_CLIENTE, "CLIENTE");
 
@@ -116,9 +111,7 @@ class OrcamentoIT extends AbstractIT {
     @Order(3)
     @DisplayName("cliente deve reprovar orçamento com motivo")
     void clienteDeveReprovarOrcamento() {
-        String mecLogin = extrairCampo(restTemplate.postForEntity("/auth/login", jsonEntity(
-                Map.of("email", TestUtils.EMAIL_MECANICO, "senha", TestUtils.SENHA_PADRAO)
-        ), String.class).getBody(), "token");
+        String mecLogin = gerarToken(TestUtils.CPF_MECANICO, "MECANICO");
 
         Long outroOrcamentoId = orcamentoIdDe(mecLogin, "DEF5678");
 
@@ -134,9 +127,7 @@ class OrcamentoIT extends AbstractIT {
     @Order(4)
     @DisplayName("cliente deve aprovar orçamento")
     void clienteDeveAprovarOrcamento() {
-        String mecLogin = extrairCampo(restTemplate.postForEntity("/auth/login", jsonEntity(
-                Map.of("email", TestUtils.EMAIL_MECANICO, "senha", TestUtils.SENHA_PADRAO)
-        ), String.class).getBody(), "token");
+        String mecLogin = gerarToken(TestUtils.CPF_MECANICO, "MECANICO");
 
         Long novoOrcamentoId = orcamentoIdDe(mecLogin, "GHI9012");
 
@@ -168,9 +159,7 @@ class OrcamentoIT extends AbstractIT {
     @Order(7)
     @DisplayName("mecânico não deve ter acesso ao endpoint de orçamentos")
     void mecanicoNaoDeveAcessarOrcamentos() {
-        String mecLogin = extrairCampo(restTemplate.postForEntity("/auth/login", jsonEntity(
-                Map.of("email", TestUtils.EMAIL_MECANICO, "senha", TestUtils.SENHA_PADRAO)
-        ), String.class).getBody(), "token");
+        String mecLogin = gerarToken(TestUtils.CPF_MECANICO, "MECANICO");
 
         ResponseEntity<String> response = get("/orcamentos/" + orcamentoId, mecLogin);
 
@@ -181,9 +170,7 @@ class OrcamentoIT extends AbstractIT {
     @Order(8)
     @DisplayName("deve confirmar que reprova orçamento com sucesso e registra o motivo")
     void deveReprovarOrcamentoSemMotivo() {
-        String mecLogin = extrairCampo(restTemplate.postForEntity("/auth/login", jsonEntity(
-                Map.of("email", TestUtils.EMAIL_MECANICO, "senha", TestUtils.SENHA_PADRAO)
-        ), String.class).getBody(), "token");
+        String mecLogin = gerarToken(TestUtils.CPF_MECANICO, "MECANICO");
 
         Long idParaRecusar = orcamentoIdDe(mecLogin, "JKL3456");
 

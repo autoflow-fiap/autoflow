@@ -72,19 +72,13 @@ Os componentes são standalone e as rotas usam lazy loading.
 
 As autorizações são aplicadas por `authGuard` e `roleGuard`. Os fluxos públicos não exigem login, mas exigem token quando definido pelo backend.
 
-## Login de demonstracao
+## Login por CPF/CNPJ
 
-O seed do backend disponibiliza estas contas para a avaliacao local. A senha de todas e `Senha@1234`:
+O frontend envia `cpf_cnpj` e `senha` para `POST /auth/login` no host atual. Em homologação, o host é o endpoint HTTPS do Amazon API Gateway HTTP API, que invoca a Lambda nativamente. As chamadas de negócio e os assets usam a mesma origem.
 
-| E-mail                   | Perfil      |
-|--------------------------|-------------|
-| `admin@autoflow.com`     | `ADMIN`     |
-| `atendente@autoflow.com` | `ATENDENTE` |
-| `mecanico1@autoflow.com` | `MECANICO`  |
-| `mecanico2@autoflow.com` | `MECANICO`  |
-| `cliente@autoflow.com`   | `CLIENTE`   |
+As APIs de negócio usam o prefixo relativo `/api`. O JWT retornado é enviado nas chamadas ao backend por `Authorization: Bearer`. O backend e a Lambda precisam usar o mesmo `JWT_SECRET`, provisionado fora do frontend. A senha continua sendo credencial secreta; CPF/CNPJ é o identificador de login.
 
-Sao credenciais destinadas somente a demonstracao do trabalho de pos-graduacao; nao as use em producao. A lista completa esta no [README principal](../README.md).
+O seed disponibiliza contas de demonstração local. Consulte as migrations e a configuração local para dados de teste; não use contas ou senhas de demonstração em produção e não copie documentos pessoais para documentação pública.
 
 ## Configuração da API
 

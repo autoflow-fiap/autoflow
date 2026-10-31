@@ -120,12 +120,14 @@ class RepositoryAdaptersTest {
         when(usuarioRepository.findByRole(RoleEnum.MECANICO)).thenReturn(List.of(usuario));
         when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
         when(usuarioRepository.findByEmail("mecanico@email.com")).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.findByCpfCnpj("52998224725")).thenReturn(Optional.of(usuario));
         when(usuarioRepository.existsByEmail("mecanico@email.com")).thenReturn(true);
 
         assertEquals(RoleEnum.MECANICO, adapter.findAll().getFirst().getRole());
         assertEquals(RoleEnum.MECANICO, adapter.findByRole(RoleEnum.MECANICO).getFirst().getRole());
         assertTrue(adapter.findById(1L).isPresent());
         assertTrue(adapter.findByEmail("mecanico@email.com").isPresent());
+        assertTrue(adapter.findByCpfCnpj("52998224725").isPresent());
         assertTrue(adapter.existsByEmail("mecanico@email.com"));
     }
 

@@ -1,0 +1,240 @@
+import json
+import os
+import unittest
+from unittest.mock import patch
+
+import eks_preflight
+
+
+IDENTITY = {"Account": "123456789012"}
+ACTIVE_CLUSTER = {"cluster": {"status": "ACTIVE"}}
+ACTIVE_GROUP = {"nodegroup": {"status": "ACTIVE", "health": {"issues": []}}}
+
+
+def node(ready):
+    return {"status": {"conditions": [{"type": "Ready", "status": "True" if ready else "False"}]}}
+
+
+class PreflightTests(unittest.TestCase):
+    def setUp(self):
+        self.env = patch.dict(os.environ, {
+            "AWS_EXPECTED_ACCOUNT_ID": "123456789012", "AWS_REGION": "us-east-1",
+            "EKS_PREFLIGHT_TIMEOUT_SECONDS": "1", "EKS_PREFLIGHT_POLL_INTERVAL_SECONDS": "1",
+        }, clear=False)
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        self.sequence = [json.dumps(IDENTITY), json.dumps(ACTIVE_CLUSTER), json.dumps(ACTIVE_GROUP), "arn:aws:eks:us-east-1:123456789012:cluster/eks-autoflow", json.dumps({"items": [node(True), node(True)]})]
+
+    def execute(self, **kwargs):
+        merged = dict(kwargs)
+        side_effect = merged.pop("side_effect", None)
+        with patch.object(eks_preflight, "run", side_effect=side_effect or self.sequence.copy()), patch.object(eks_preflight.time, "sleep"):
+            return eks_preflight.main()
+
+    def test_wrong_account(self):
+        with patch.dict(os.environ, {"AWS_EXPECTED_ACCOUNT_ID": "000000000000"}), patch.object(eks_preflight, "run", return_value=json.dumps(IDENTITY)):
+            with self.assertRaisesRegex(eks_preflight.PreflightError, "Conta AWS incorreta"):
+                eks_preflight.main()
+
+    def test_invalid_or_expired_credentials(self):
+        with patch.object(eks_preflight, "run", side_effect=eks_preflight.PreflightError("Credenciais AWS inválidas/expiradas")):
+            with self.assertRaisesRegex(eks_preflight.PreflightError, "Credenciais AWS"):
+                eks_preflight.main()
+
+    def test_cluster_unavailable_times_out(self):
+        with patch.object(eks_preflight, "run", side_effect=[json.dumps(IDENTITY), eks_preflight.PreflightError("Falha em aws eks describe-cluster: indisponível")]), patch.object(eks_preflight.time, "monotonic", side_effect=[0, 0, 0, 2, 2]), patch.object(eks_preflight.time, "sleep"):
+            with self.assertRaisesRegex(eks_preflight.PreflightError, "Timeout"):
+                eks_preflight.main()
+
+    def test_degraded_nodegroup_reports_health(self):
+        degraded = {"nodegroup": {"status": "DEGRADED", "health": {"issues": [{"code": "NodeCreationFailure"}]}}}
+        with patch.object(eks_preflight, "run", side_effect=[json.dumps(IDENTITY), json.dumps(ACTIVE_CLUSTER), json.dumps(degraded)]), patch.object(eks_preflight.time, "monotonic", side_effect=[0, 0, 0, 2, 2]), patch.object(eks_preflight.time, "sleep"):
+            with self.assertRaisesRegex(eks_preflight.PreflightError, "NodeCreationFailure"):
+                eks_preflight.main()
+
+    def test_zero_nodes_times_out(self):
+        self.sequence[-1] = json.dumps({"items": []})
+        with patch.object(eks_preflight, "run", side_effect=self.sequence), patch.object(eks_preflight.time, "monotonic", side_effect=[0, 0, 0, 2, 2]), patch.object(eks_preflight.time, "sleep"):
+            with self.assertRaisesRegex(eks_preflight.PreflightError, "Nós insuficientes"):
+                eks_preflight.main()
+
+    def test_one_ready_node_times_out(self):
+        self.sequence[-1] = json.dumps({"items": [node(True), node(False)]})
+        with patch.object(eks_preflight, "run", side_effect=self.sequence), patch.object(eks_preflight.time, "monotonic", side_effect=[0, 0, 0, 2, 2]), patch.object(eks_preflight.time, "sleep"):
+            with self.assertRaisesRegex(eks_preflight.PreflightError, "1 Ready"):
+                eks_preflight.main()
+
+    def test_two_ready_nodes_pass(self):
+        self.assertEqual(self.execute(), 0)
+
+    def test_command_failure_is_reported(self):
+        with patch.object(eks_preflight, "run", side_effect=eks_preflight.PreflightError("Comando não encontrado: kubectl")), patch.object(eks_preflight.time, "monotonic", side_effect=[0, 0, 0, 2, 2]), patch.object(eks_preflight.time, "sleep"):
+            with self.assertRaisesRegex(eks_preflight.PreflightError, "kubectl"):
+                eks_preflight.main()
+
+    def test_wrong_context_fails_immediately(self):
+        values = self.sequence[:3] + ["outro-cluster"]
+        with patch.object(eks_preflight, "run", side_effect=values):
+            with self.assertRaisesRegex(eks_preflight.PreflightError, "Contexto kubectl incorreto"):
+                eks_preflight.main()
+
+    def test_pipeline_plans_then_applies_on_hosted_runner_after_environment_gate(self):
+        from pathlib import Path
+        workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
+        content = workflow.read_text(encoding="utf-8")
+        plan = content.split("  deploy-plan:", 1)[1].split("  deploy-apply:", 1)[0]
+        apply = content.split("  deploy-apply:", 1)[1].split("  smoke-tests:", 1)[0]
+        self.assertIn("runs-on: ubuntu-latest", plan)
+        selected_environment = "environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}"
+        self.assertIn(selected_environment, plan)
+        self.assertIn(selected_environment, apply)
+        self.assertIn("github.event_name == 'workflow_dispatch'", plan)
+        self.assertIn("github.event_name == 'push'", plan)
+        self.assertIn("needs.gate.outputs.auto_cd_enabled == 'true'", plan)
+        self.assertIn("EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow-${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}.json", plan)
+        self.assertIn("eks_endpoint_access.py authorize", plan)
+        for orphaned_resource in (
+            "kubectl get deployment autoflow-backend",
+            "kubectl get deployment autoflow-frontend",
+            "kubectl get service autoflow-backend",
+            "kubectl get service autoflow-frontend",
+            "kubectl get configmap autoflow-config",
+            "kubectl get service autoflow-backend-gateway",
+            "kubectl get service autoflow-frontend-gateway",
+            "kubectl get configmap autoflow-gateway-nginx",
+        ):
+            self.assertIn(orphaned_resource, plan)
+        self.assertIn("terraform plan -input=false -no-color -out=infra.tfplan", plan)
+        self.assertIn("python ../scripts/review_terraform_plan.py", plan)
+        self.assertIn("actions/upload-artifact@v4", plan)
+        self.assertIn("retention-days: 1", plan)
+        self.assertIn("openssl enc -aes-256-cbc", plan)
+        self.assertIn("plan_sha256", plan)
+        self.assertIn("runs-on: ubuntu-latest", apply)
+        self.assertIn("GITHUB_DEPLOYMENT_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}", apply)
+        self.assertIn("environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}", apply)
+        self.assertIn('test "$TERRAFORM_APPLY_APPROVAL_CONFIGURED" = true', apply)
+        self.assertNotIn("gh api", apply)
+        self.assertIn("github.event_name == 'workflow_dispatch'", apply)
+        self.assertIn("inputs.apply == true", apply)
+        self.assertNotIn("github.event_name == 'push'", apply)
+        self.assertIn("actions/download-artifact@v4", apply)
+        self.assertIn("sha256sum --check --status", apply)
+        self.assertIn("cmp --silent", apply)
+        self.assertIn("openssl enc -d -aes-256-cbc", apply)
+        self.assertIn("terraform apply -input=false infra.tfplan", apply)
+        self.assertNotIn("terraform plan", apply)
+        self.assertIn("allow_destructive", content)
+        dispatch_authorization = "ALLOW_DESTRUCTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false' }}"
+        self.assertIn(dispatch_authorization, plan)
+        self.assertIn(dispatch_authorization, apply)
+        self.assertIn("review_terraform_plan.py", apply)
+        self.assertIn("kubectl rollout status deployment/autoflow-backend", apply)
+        self.assertNotIn("smoke_api_gateway.py", apply)
+        smoke = content.split("  smoke-tests:", 1)[1]
+        self.assertIn("needs: [gate, deploy-apply]", smoke)
+        self.assertIn("runs-on: ubuntu-latest", smoke)
+        self.assertIn("smoke_api_gateway.py", smoke)
+        self.assertIn("inputs.smoke_tests_only", smoke)
+        self.assertIn("API_GATEWAY_CORS_ORIGINS: ${{ vars.API_GATEWAY_CORS_ORIGINS }}", smoke)
+        self.assertIn("eks_endpoint_access.py cleanup", apply)
+        self.assertIn("kubectl rollout status deployment/autoflow-frontend", apply)
+        self.assertNotIn("deployment-blocked-private-eks:", content)
+        self.assertIn("ref: ${{ needs.gate.outputs.sha }}", plan)
+        self.assertIn("ref: ${{ needs.gate.outputs.sha }}", apply)
+        self.assertIn("terraform_plan_metadata.py", plan)
+        self.assertIn("terraform_plan_metadata.py", apply)
+
+    def test_newrelic_fingerprint_is_generated_uploaded_and_verified_by_apply(self):
+        from pathlib import Path
+        workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
+        content = workflow.read_text(encoding="utf-8")
+        plan = content.split("  deploy-plan:", 1)[1].split("  deploy-apply:", 1)[0]
+        apply = content.split("  deploy-apply:", 1)[1].split("  smoke-tests:", 1)[0]
+        package = plan.split("- name: Criptografar plan e calcular hashes de integridade", 1)[1].split("- name:", 1)[0]
+        upload = plan.split("- name: Armazenar artifact criptografado com retenção mínima", 1)[1].split("- name:", 1)[0]
+        download = apply.split("- name: Baixar artifact de plan desta execução", 1)[1].split("- name:", 1)[0]
+        verify = apply.split("- name: Confirmar configuração New Relic idêntica à do plan", 1)[1].split("- name:", 1)[0]
+
+        self.assertLess(plan.index('fingerprint "$RUNNER_TEMP/newrelic-inputs.sha256"'), plan.index("- name: Criptografar plan e calcular hashes de integridade"))
+        self.assertIn('cp "$RUNNER_TEMP/newrelic-inputs.sha256" "$RUNNER_TEMP/autoflow-plan/newrelic-inputs.sha256"', package)
+        self.assertIn("newrelic-inputs.sha256", upload)
+        self.assertIn("path: ${{ runner.temp }}/autoflow-plan", download)
+        self.assertIn('sha256sum --check --status', verify)
+        self.assertIn('verify-fingerprint "$RUNNER_TEMP/autoflow-plan/newrelic-inputs.sha256"', verify)
+
+    def test_images_are_published_only_from_authorized_dispatch_with_commit_sha(self):
+        from pathlib import Path
+        workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
+        content = workflow.read_text(encoding="utf-8")
+        publish = content.split("  docker-publish:", 1)[1].split("  deploy-plan:", 1)[0]
+        self.assertIn("github.event_name == 'workflow_dispatch'", publish)
+        self.assertIn("inputs.apply == true", publish)
+        self.assertIn("refs/heads/develop", publish)
+        self.assertIn("refs/heads/main", publish)
+        self.assertIn("environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}", publish)
+        self.assertIn("needs: [gate, backend-build, frontend-build, terraform-static]", publish)
+        self.assertNotIn("snyk-scan", publish)
+        self.assertIn("${{ github.sha }}", publish)
+        self.assertIn("username: ${{ vars.DOCKERHUB_USERNAME }}", publish)
+        self.assertIn("password: ${{ secrets.DOCKERHUB_PASSWORD }}", publish)
+        self.assertNotIn("pull_request", publish)
+        self.assertNotIn(":latest", content)
+
+    def test_feature_branches_run_automatic_ci_and_cannot_start_cd(self):
+        from pathlib import Path
+        workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
+        content = workflow.read_text(encoding="utf-8")
+        ci = (Path(__file__).parents[1] / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        docker_build = ci.split("  docker-build:", 1)[1].split("  snyk-scan:", 1)[0]
+        publish = content.split("  docker-publish:", 1)[1].split("  deploy-plan:", 1)[0]
+        plan = content.split("  deploy-plan:", 1)[1].split("  deploy-apply:", 1)[0]
+        apply = content.split("  deploy-apply:", 1)[1].split("  smoke-tests:", 1)[0]
+        smoke = content.split("  smoke-tests:", 1)[1]
+
+        self.assertIn("branches: [develop, main, 'feature/**']", ci)
+        self.assertIn("  push:\n    branches: [develop, main]", content.split("permissions:", 1)[0])
+        self.assertNotIn("github.event_name == 'pull_request'", content.split("permissions:", 1)[0])
+        self.assertIn("needs: [backend-build, frontend-build, terraform-static]", docker_build)
+        self.assertIn("docker build --file backend/Dockerfile", docker_build)
+        self.assertIn("docker build --file frontend/Dockerfile", docker_build)
+        self.assertNotIn("docker/login-action", docker_build)
+        self.assertNotIn("build-push-action", docker_build)
+        self.assertNotIn("secrets.", docker_build)
+
+        for privileged_job in (publish, plan, apply):
+            self.assertNotIn("feature/", privileged_job)
+        self.assertIn("github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'", plan)
+        self.assertIn("github.ref == 'refs/heads/develop'", apply)
+        self.assertIn("github.ref == 'refs/heads/main'", apply)
+        self.assertNotIn("github.ref == 'refs/heads/feature/'", smoke)
+        self.assertIn("inputs.smoke_tests_only", smoke)
+        self.assertIn("github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'", smoke)
+        self.assertIn("environment: ${{ needs.gate.outputs.environment }}", smoke)
+        self.assertNotIn("smoke_api_gateway.py", docker_build)
+
+    def test_feature_terraform_validation_is_offline_and_does_not_read_remote_state(self):
+        from pathlib import Path
+        workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
+        content = workflow.read_text(encoding="utf-8")
+        ci = (Path(__file__).parents[1] / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        static = ci.split("  terraform-static:", 1)[1].split("  docker-build:", 1)[0]
+        self.assertIn("terraform init -backend=false -input=false", static)
+        self.assertIn("terraform validate", static)
+        self.assertNotIn("AWS_ACCESS_KEY_ID", static)
+        self.assertNotIn("terraform plan", static)
+
+    def test_snyk_failures_are_non_blocking_and_uploaded_as_alerts(self):
+        from pathlib import Path
+        workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
+        content = workflow.read_text(encoding="utf-8")
+        ci = (Path(__file__).parents[1] / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        snyk_job = ci.split("  snyk-scan:", 1)[1]
+        self.assertEqual(snyk_job.count("continue-on-error: true"), 2)
+        self.assertIn("snyk-open-source.sarif", snyk_job)
+        self.assertIn("snyk-container.sarif", snyk_job)
+        self.assertIn("github/codeql-action/upload-sarif@v3", snyk_job)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,7 +1,5 @@
 terraform {
-  backend "s3" {
-    bucket = "state-autoflow-terraform"
-    key    = "autoflow/terraform.tfstate"
-    region = "us-east-1"
-  }
+  required_version = ">= 1.10.0"
+
+  backend "s3" {}
 }

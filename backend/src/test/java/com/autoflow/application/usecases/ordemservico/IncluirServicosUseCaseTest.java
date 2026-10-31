@@ -41,6 +41,8 @@ class IncluirServicosUseCaseTest {
         var usuario = new Usuario();
         usuario.setId(id);
         usuario.setRole(role);
+        usuario.setEmail(role == RoleEnum.ADMIN ? "admin@autoflow.com" : "mecanico@autoflow.com");
+        usuario.setCpfCnpj(id == 1L ? "52998224725" : id == 2L ? "12345678909" : "11144477735");
         return usuario;
     }
 
@@ -107,8 +109,8 @@ class IncluirServicosUseCaseTest {
         ordem.setStatus(StatusOrdemServico.RECEBIDA);
         new IncluirServicosUseCaseImpl(ordemServicoGateway, servicoGateway,
                 usuarioGateway, accessPolicy).execute("OS-2",
-                List.of(new ServicoSolicitado(7L)), "nao-consulta@autoflow.com");
-        verify(usuarioGateway, never()).findByEmail("nao-consulta@autoflow.com");
+                List.of(new ServicoSolicitado(7L)), "nao-consulta@email.com");
+        verify(usuarioGateway, never()).findByEmail("nao-consulta@email.com");
     }
 
     @Test

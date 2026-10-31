@@ -141,6 +141,11 @@ class DecidirOrcamentoUseCaseTest {
         Usuario usuario = new Usuario();
         usuario.setNome(nome);
         usuario.setRole(role);
+        usuario.setEmail(switch (nome) {
+            case "Maria" -> "cliente@exemplo.com";
+            case "Outro" -> "outro@exemplo.com";
+            default -> "mecanico@exemplo.com";
+        });
         return usuario;
     }
 }

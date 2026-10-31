@@ -20,7 +20,8 @@ public class ConsultarOrcamentoAutenticadoUseCaseImpl implements ConsultarOrcame
                 .orElseThrow(() -> ApplicationException.notFound("Orçamento não encontrado"));
         var usuario = usuarioGateway.findByEmail(email)
                 .orElseThrow(() -> ApplicationException.notFound("Usuário autenticado não encontrado"));
-        if (usuario.getRole() == RoleEnum.CLIENTE && !email.equals(orcamento.getCliente().getEmail())) {
+        if (usuario.getRole() == RoleEnum.CLIENTE
+            && !email.equalsIgnoreCase(orcamento.getCliente().getEmail())) {
             throw ApplicationException.forbidden();
         }
         return orcamento;

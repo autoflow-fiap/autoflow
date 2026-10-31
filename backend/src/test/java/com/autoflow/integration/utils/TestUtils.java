@@ -8,6 +8,7 @@ public final class TestUtils {
 
     // CPFs matematicamente válidos para testes
     public static final String CPF_ATENDENTE   = "52998224725";
+    public static final String CPF_ATENDENTE_2 = "16899535009";
     public static final String CPF_MECANICO    = "12345678909";
     public static final String CPF_CLIENTE     = "11144477735";
     public static final String CPF_CLIENTE_2   = "98765432100";
@@ -30,10 +31,6 @@ public final class TestUtils {
                 "senha", SENHA_PADRAO,
                 "role", role
         );
-    }
-
-    public static Map<String, Object> loginRequest(String email) {
-        return Map.of("email", email, "senha", SENHA_PADRAO);
     }
 
     public static Map<String, Object> clienteRequest(String nome, String cpfCnpj, String email) {

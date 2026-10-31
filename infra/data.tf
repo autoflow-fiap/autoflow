@@ -1,17 +1,19 @@
 
 data "aws_eks_cluster" "autoflow" {
-  name = aws_eks_cluster.autoflow.name
+  name = var.cluster_name
 }
 
 data "aws_eks_cluster_auth" "auth" {
-  name = aws_eks_cluster.autoflow.name
+  name = var.cluster_name
 }
 
-data "kubernetes_service_v1" "backend_lb" {
-  depends_on = [time_sleep.wait_seconds]
+data "terraform_remote_state" "database" {
+  backend = "s3"
 
-  metadata {
-    name      = "autoflow-backend-service"
-    namespace = "default"
+  config = {
+    bucket              = var.terraform_state_bucket
+    key                 = var.rds_state_key
+    region              = var.region_default
+    allowed_account_ids = var.aws_allowed_account_ids
   }
 }

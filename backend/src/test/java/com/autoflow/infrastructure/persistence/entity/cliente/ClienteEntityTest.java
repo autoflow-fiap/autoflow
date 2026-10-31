@@ -1,6 +1,7 @@
 package com.autoflow.infrastructure.persistence.entity.cliente;
 
 import com.autoflow.domain.usuario.RoleEnum;
+import com.autoflow.domain.cliente.ClienteStatus;
 import com.autoflow.infrastructure.persistence.entity.usuario.UsuarioEntity;
 import com.autoflow.infrastructure.persistence.entity.veiculo.VeiculoEntity;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,6 +42,7 @@ class ClienteEntityTest {
         assertEquals("12345678901", cliente.getCpfCnpj());
         assertEquals("joao@example.com", cliente.getEmail());
         assertEquals("11999999999", cliente.getTelefone());
+        assertEquals(ClienteStatus.ATIVO, cliente.getStatus());
     }
 
     @Test
@@ -62,5 +64,14 @@ class ClienteEntityTest {
 
         assertTrue(cliente.getVeiculos().contains(veiculo));
         assertEquals("Toyota", cliente.getVeiculos().get(0).getMarca());
+    }
+
+    @Test
+    void deveAceitarOsDoisStatus() {
+        cliente.setStatus(ClienteStatus.INATIVO);
+        assertEquals(ClienteStatus.INATIVO, cliente.getStatus());
+
+        cliente.setStatus(ClienteStatus.ATIVO);
+        assertEquals(ClienteStatus.ATIVO, cliente.getStatus());
     }
 }

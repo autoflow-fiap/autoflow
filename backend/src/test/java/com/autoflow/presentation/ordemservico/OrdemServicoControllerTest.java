@@ -7,6 +7,7 @@ import com.autoflow.application.input.ordemservico.OrdemServicoFiltroInput;
 import com.autoflow.application.output.PageResult;
 import com.autoflow.application.output.ordemservico.*;
 import com.autoflow.application.port.in.ordemservico.*;
+import com.autoflow.application.policy.ClienteAtivoPolicy;
 import com.autoflow.domain.cliente.Cliente;
 import com.autoflow.domain.orcamento.Orcamento;
 import com.autoflow.domain.orcamento.StatusOrcamento;
@@ -118,6 +119,9 @@ class OrdemServicoControllerTest {
 
     @MockitoBean
     private CustomUserDetailsService userDetailsService;
+
+    @MockitoBean
+    private ClienteAtivoPolicy clienteAtivoPolicy;
 
     @Test
     @WithMockUser(roles = "ATENDENTE")

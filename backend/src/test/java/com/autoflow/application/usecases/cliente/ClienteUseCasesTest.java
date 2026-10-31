@@ -4,7 +4,9 @@ import com.autoflow.application.exception.ClienteDuplicadoException;
 import com.autoflow.application.exception.ClienteNaoEncontradoException;
 import com.autoflow.application.gateway.ClienteGateway;
 import com.autoflow.application.input.cliente.ClienteInput;
+import com.autoflow.application.input.cliente.ClienteStatusInput;
 import com.autoflow.application.output.cliente.ClienteOutput;
+import com.autoflow.domain.cliente.ClienteStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -62,6 +64,7 @@ class ClienteUseCasesTest {
                 .cpfCnpj("12345678901")
                 .telefone("11999999999")
                 .email("bruno@email.com")
+                .status(ClienteStatus.ATIVO)
                 .build();
     }
 
@@ -167,6 +170,34 @@ class ClienteUseCasesTest {
 
         assertThrows(ClienteNaoEncontradoException.class,
                 () -> deletarClienteUseCase.execute(999L));
+    }
+
+    @Test
+    void deveAlterarStatusNosDoisSentidos() {
+        var useCase = new AlterarStatusClienteUseCaseImpl(clienteGateway);
+        ClienteOutput inativo = ClienteOutput.builder()
+                .id(1L).nome("Bruno").cpfCnpj(input.cpfCnpj()).telefone(input.telefone())
+                .email(input.email()).status(ClienteStatus.INATIVO).build();
+        when(clienteGateway.findById(1L)).thenReturn(Optional.of(output));
+        when(clienteGateway.updateStatus(1L, ClienteStatus.INATIVO)).thenReturn(inativo);
+
+        assertEquals(inativo, useCase.execute(1L, new ClienteStatusInput(ClienteStatus.INATIVO)));
+        verify(clienteGateway).updateStatus(1L, ClienteStatus.INATIVO);
+
+        when(clienteGateway.findById(1L)).thenReturn(Optional.of(inativo));
+        when(clienteGateway.updateStatus(1L, ClienteStatus.ATIVO)).thenReturn(output);
+        assertEquals(output, useCase.execute(1L, new ClienteStatusInput(ClienteStatus.ATIVO)));
+    }
+
+    @Test
+    void deveLancarNotFoundAoAlterarStatusDeClienteInexistente() {
+        var useCase = new AlterarStatusClienteUseCaseImpl(clienteGateway);
+        when(clienteGateway.findById(999L)).thenReturn(Optional.empty());
+
+        assertThrows(ClienteNaoEncontradoException.class,
+                () -> useCase.execute(999L, new ClienteStatusInput(ClienteStatus.INATIVO)));
+
+        verify(clienteGateway, never()).updateStatus(anyLong(), any());
     }
 
     @Test

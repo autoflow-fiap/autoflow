@@ -27,18 +27,11 @@ class VeiculoIT extends AbstractIT {
         adminToken = registrarELogar(TestUtils.EMAIL_ADMIN, TestUtils.CPF_ATENDENTE, "ADMIN");
 
         // cliente com usuário vinculado
-        registrarELogar(TestUtils.EMAIL_CLIENTE, TestUtils.CPF_CLIENTE, "CLIENTE");
-        clienteToken = logar(TestUtils.EMAIL_CLIENTE);
+        clienteToken = registrarELogar(TestUtils.EMAIL_CLIENTE, TestUtils.CPF_CLIENTE, "CLIENTE");
 
         post("/clientes", TestUtils.clienteRequest("Dono do Carro", TestUtils.CPF_CLIENTE, TestUtils.EMAIL_CLIENTE), adminToken);
 
         placa = TestUtils.placaUnica();
-    }
-
-    private String logar(String email) {
-        var resp = restTemplate.postForEntity("/auth/login",
-                jsonEntity(TestUtils.loginRequest(email)), String.class);
-        return extrairCampo(resp.getBody(), "token");
     }
 
     private JsonNode content(ResponseEntity<String> response) {

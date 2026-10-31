@@ -1,11 +1,12 @@
+%% Registro histórico da Fase 2; não representa os gates atuais do workflow.
 flowchart TB
 
     subgraph cicd["CI/CD - GitHub Actions"]
         repository["Repositório Git"] --> triggers["push ou pull_request<br/>develop / main"]
-        triggers --> backendTests["Testes backend + Sonar"]
-        triggers --> frontendTests["Testes frontend"]
-        backendTests --> backendBuild["Build backend"]
-        frontendTests --> frontendBuild["Build frontend"]
+        triggers --> backendTests["Testes do backend + Sonar"]
+        triggers --> frontendTests["Testes do frontend"]
+        backendTests --> backendBuild["Build do backend"]
+        frontendTests --> frontendBuild["Build do frontend"]
         backendBuild --> publish["Publicação de imagens<br/>Docker Hub"]
         frontendBuild --> publish
         triggers -. "push em develop" .-> snyk["Snyk<br/>verificação paralela"]
@@ -45,7 +46,7 @@ flowchart TB
     metrics["Metrics Server<br/>pré-requisito externo do HPA"] -.-> hpa
     hpa -.-> backendDeployment
 
-    terraform --> eks
+        terraform --> eks
     deploy -. "cria/valida" .-> stateBucket
 
     classDef pipelineNode fill:#ecfdf5,stroke:#059669,color:#064e3b;

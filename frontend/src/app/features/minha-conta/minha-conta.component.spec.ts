@@ -11,7 +11,7 @@ describe('MinhaContaComponent', () => {
 
   const cliente: ClienteLogadoResponse = {
     id: 1, nome: 'Cliente Teste', cpfCnpj: '123.456.789-00', telefone: '11999999999',
-    email: 'cliente@teste.com', veiculos: [],
+    email: 'cliente@teste.com', status: 'ATIVO', veiculos: [],
   };
 
   beforeEach(() => {

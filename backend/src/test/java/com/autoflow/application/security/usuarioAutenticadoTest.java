@@ -30,9 +30,9 @@ class UsuarioAutenticadoServiceTest {
     @Test
     void deveRetornarEmailDoUsuarioAutenticado() {
         when(currentUserGateway.getCurrentUser())
-                .thenReturn(Optional.of(new CurrentUser("teste@email.com", RoleEnum.CLIENTE)));
+                .thenReturn(Optional.of(new CurrentUser("cliente@email.com", RoleEnum.CLIENTE)));
 
-        assertEquals("teste@email.com", service.getEmail());
+        assertEquals("cliente@email.com", service.getEmail());
     }
 
     @Test

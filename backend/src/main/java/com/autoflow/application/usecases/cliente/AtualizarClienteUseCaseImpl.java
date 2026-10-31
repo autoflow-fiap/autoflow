@@ -16,10 +16,18 @@ public class AtualizarClienteUseCaseImpl implements AtualizarClienteUseCase {
 
     @Override
     public ClienteOutput execute(Long id, ClienteInput input) {
-        Cliente.reconstituir(id, input.nome(), input.cpfCnpj(), input.telefone(), input.email());
-        if (clienteGateway.findById(id).isEmpty()) {
-            throw new ClienteNaoEncontradoException("Cliente não encontrado com o ID: " + id);
-        }
+        var atual = clienteGateway.findById(id)
+                .orElseThrow(() -> new ClienteNaoEncontradoException(
+                        "Cliente não encontrado com o ID: " + id));
+
+        Cliente.reconstituir(
+                atual.id(),
+                atual.nome(),
+                atual.cpfCnpj(),
+                atual.telefone(),
+                atual.email(),
+                atual.status()
+        ).atualizar(input.nome(), input.cpfCnpj(), input.telefone(), input.email());
 
         if (clienteGateway.existsByCpfCnpjAndIdNot(input.cpfCnpj(), id)) {
             throw new ClienteDuplicadoException("CPF/CNPJ já cadastrado");

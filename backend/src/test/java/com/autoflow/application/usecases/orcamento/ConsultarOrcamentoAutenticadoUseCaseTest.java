@@ -49,7 +49,7 @@ class ConsultarOrcamentoAutenticadoUseCaseTest {
         when(usuarioGateway.findByEmail(email)).thenReturn(Optional.of(usuario));
 
         var exception = assertThrows(ApplicationException.class,
-                () -> useCase.execute(1L, email));
+            () -> useCase.execute(1L, email));
 
         assertEquals(ApplicationException.ErrorType.FORBIDDEN, exception.type());
     }
@@ -84,6 +84,7 @@ class ConsultarOrcamentoAutenticadoUseCaseTest {
         var usuario = new Usuario();
         usuario.setRole(role);
         usuario.setEmail(email);
+        usuario.setCpfCnpj("12345678901");
         return usuario;
     }
 }

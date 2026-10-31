@@ -35,6 +35,8 @@ class ListarOrdensServicoUseCaseTest {
     void deveListarOrdensDoMecanicoUsandoEmailComoRestricao() {
         Usuario mecanico = new Usuario();
         mecanico.setRole(RoleEnum.MECANICO);
+        mecanico.setEmail("mecanico@autoflow.com");
+        mecanico.setCpfCnpj("12345678909");
         PageQuery pageQuery = new PageQuery(0, 10);
         PageResult<OrdemServico> esperado = new PageResult<>(List.of(), 0, 0, 10);
         when(usuarioGateway.findByEmail("mecanico@autoflow.com")).thenReturn(Optional.of(mecanico));

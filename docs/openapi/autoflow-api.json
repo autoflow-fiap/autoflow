@@ -152,7 +152,7 @@
                 "$ref": "#/components/schemas/LoginRequest"
               },
               "example": {
-                "email": "atendente@autoflow.com",
+                "cpfCnpj": "52998224725",
                 "senha": "<senha-do-ambiente>"
               }
             }
@@ -532,6 +532,74 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ClienteRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clientes/{id}/status": {
+      "patch": {
+        "operationId": "alterarStatusCliente",
+        "summary": "Alterar status do cliente",
+        "tags": [
+          "clientes"
+        ],
+        "description": "Ativar ou desativar cliente. Permissão: ADMIN.",
+        "responses": {
+          "200": {
+            "description": "Status do cliente alterado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClienteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "example": 1
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClienteStatusRequest"
+              },
+              "examples": {
+                "inativar": {
+                  "value": {
+                    "status": "INATIVO"
+                  }
+                },
+                "ativar": {
+                  "value": {
+                    "status": "ATIVO"
+                  }
+                }
               }
             }
           }
@@ -2858,10 +2926,9 @@
       "LoginRequest": {
         "type": "object",
         "properties": {
-          "email": {
+          "cpfCnpj": {
             "type": "string",
-            "format": "email",
-            "example": "atendente@autoflow.com"
+            "example": "52998224725"
           },
           "senha": {
             "type": "string",
@@ -2870,7 +2937,7 @@
           }
         },
         "required": [
-          "email",
+          "cpfCnpj",
           "senha"
         ]
       },
@@ -3017,6 +3084,22 @@
           "email"
         ]
       },
+      "ClienteStatusRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ATIVO",
+              "INATIVO"
+            ],
+            "example": "INATIVO"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
       "ClienteVeiculoResponse": {
         "type": "object",
         "properties": {
@@ -3095,6 +3178,14 @@
             "type": "string",
             "format": "email",
             "example": "maria@example.com"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ATIVO",
+              "INATIVO"
+            ],
+            "example": "ATIVO"
           },
           "veiculos": {
             "type": "array",

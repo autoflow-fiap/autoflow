@@ -16,14 +16,16 @@ class ClienteTest {
         assertEquals("12345678901", cliente.cpfCnpj());
         assertEquals("joao@example.com", cliente.email());
         assertEquals(null, cliente.id());
+        assertEquals(ClienteStatus.ATIVO, cliente.status());
     }
 
     @Test
     void deveReconstituirClienteComIdentidade() {
         Cliente cliente = Cliente.reconstituir(
-                1L, "João Silva", "12345678901", "11999999999", "joao@example.com");
+                1L, "João Silva", "12345678901", "11999999999", "joao@example.com", ClienteStatus.INATIVO);
 
         assertEquals(1L, cliente.id());
+        assertEquals(ClienteStatus.INATIVO, cliente.status());
     }
 
     @Test
@@ -37,6 +39,22 @@ class ClienteTest {
         assertEquals(1L, atualizado.id());
         assertEquals("Maria Silva", atualizado.nome());
         assertEquals("98765432101", atualizado.cpfCnpj());
+        assertEquals(ClienteStatus.ATIVO, atualizado.status());
+    }
+
+    @Test
+    void devePermitirAlterarStatusNosDoisSentidos() {
+        Cliente cliente = Cliente.reconstituir(
+                1L, "João Silva", "12345678901", "11999999999", "joao@example.com", ClienteStatus.ATIVO);
+
+        assertEquals(ClienteStatus.INATIVO, cliente.alterarStatus(ClienteStatus.INATIVO).status());
+        assertEquals(ClienteStatus.ATIVO, cliente.alterarStatus(ClienteStatus.ATIVO).status());
+    }
+
+    @Test
+    void deveRejeitarStatusNuloNaReconstituicao() {
+        assertThrows(IllegalArgumentException.class, () -> Cliente.reconstituir(
+                1L, "João Silva", "12345678901", "11999999999", "joao@example.com", null));
     }
 
     @Test

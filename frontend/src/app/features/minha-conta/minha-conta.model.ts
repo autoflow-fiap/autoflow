@@ -4,6 +4,7 @@ import {
   StatusOrcamento,
   StatusOrdemServico,
 } from '../ordens-servico/ordem-servico.model';
+import { ClienteStatus } from '../clientes/cliente.model';
 
 export interface ClienteLogadoResponse {
   id: number;
@@ -11,6 +12,7 @@ export interface ClienteLogadoResponse {
   cpfCnpj: string;
   telefone: string;
   email: string;
+  status: ClienteStatus;
   veiculos: VeiculoClienteResponse[];
 }
 

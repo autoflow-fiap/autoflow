@@ -16,4 +16,6 @@ public interface ClienteRepository extends JpaRepository<ClienteEntity, Long> {
     boolean existsByCpfCnpjAndIdNot(String cpfCnpj, Long id);
 
     Optional<ClienteEntity> findByUsuarioEmail(String usuarioEmail);
+
+    Optional<ClienteEntity> findByUsuarioCpfCnpj(String usuarioCpfCnpj);
 }

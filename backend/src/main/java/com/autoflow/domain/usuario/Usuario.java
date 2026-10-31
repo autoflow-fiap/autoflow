@@ -6,6 +6,7 @@ public class Usuario {
     private String nome;
     private String email;
     private String senha;
+    private String cpfCnpj;
     private RoleEnum role;
 
     public Long getId() {
@@ -47,4 +48,10 @@ public class Usuario {
     public void setRole(RoleEnum role) {
         this.role = role;
     }
+
+    public String getCpfCnpj() {return cpfCnpj;}
+    public void setCpfCnpj(String cpfCnpj) {
+        this.cpfCnpj = cpfCnpj;
+    }
+
 }

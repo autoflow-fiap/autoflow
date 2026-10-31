@@ -13,7 +13,7 @@ describe('ClienteFormDialogComponent', () => {
 
   const clienteExistente: ClienteResponse = {
     id: 1, nome: 'Cliente Teste', cpfCnpj: '12345678900', telefone: '11999998888',
-    email: 'cliente@teste.com', veiculos: [],
+    email: 'cliente@teste.com', status: 'ATIVO', veiculos: [],
   };
 
   function criarComponente(data: ClienteFormDialogData): ClienteFormDialogComponent {

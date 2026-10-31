@@ -4,6 +4,7 @@ import com.autoflow.application.input.pecainsumo.PecaInsumoInput;
 import com.autoflow.application.output.PageResult;
 import com.autoflow.application.output.pecainsumo.PecaInsumoOutput;
 import com.autoflow.application.port.in.pecainsumo.*;
+import com.autoflow.application.policy.ClienteAtivoPolicy;
 import com.autoflow.domain.pecainsumo.CategoriaPecaInsumo;
 import com.autoflow.infrastructure.security.service.CustomUserDetailsService;
 import com.autoflow.infrastructure.security.service.JwtService;
@@ -73,6 +74,9 @@ class PecaInsumoControllerTest {
 
     @MockitoBean
     private CustomUserDetailsService customUserDetailsService;
+
+    @MockitoBean
+    private ClienteAtivoPolicy clienteAtivoPolicy;
 
     @Test
     @WithMockUser(roles = "ADMIN")

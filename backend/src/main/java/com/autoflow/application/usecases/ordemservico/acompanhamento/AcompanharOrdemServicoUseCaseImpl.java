@@ -29,8 +29,8 @@ public class AcompanharOrdemServicoUseCaseImpl implements AcompanharOrdemServico
     private final HistoricoStatusOsGateway historicoStatusOsGateway;
 
     @Override
-    public List<AcompanhamentoOrdemServicoOutput> execute(String emailCliente) {
-        Long clienteId = clienteGateway.findIdByUsuarioEmail(emailCliente)
+        public List<AcompanhamentoOrdemServicoOutput> execute(String emailCliente) {
+                Long clienteId = clienteGateway.findIdByUsuarioEmail(emailCliente)
                 .orElseThrow(() -> ApplicationException.notFound(
                         "Cliente autenticado não encontrado."));
 

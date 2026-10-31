@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: postgresql-service
 spec:
-  clusterIP: None
+  type: LoadBalancer
   selector:
     app: autoflow-db
   ports:

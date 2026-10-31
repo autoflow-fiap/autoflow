@@ -104,7 +104,8 @@ public class DecidirOrcamentoUseCaseImpl implements DecidirOrcamentoUseCase {
             throw ApplicationException.forbidden(
                     "Somente cliente ou administrador pode decidir o orçamento.");
         }
-        if (RoleEnum.CLIENTE.equals(usuario.getRole()) && !emailUsuario.equals(orcamento.getCliente().getEmail())) {
+        if (RoleEnum.CLIENTE.equals(usuario.getRole())
+            && !emailUsuario.equalsIgnoreCase(orcamento.getCliente().getEmail())) {
             throw ApplicationException.forbidden();
         }
         return usuario;

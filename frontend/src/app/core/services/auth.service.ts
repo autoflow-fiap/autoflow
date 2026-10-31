@@ -2,15 +2,17 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { BehaviorSubject, Observable, map, tap } from 'rxjs';
-import { environment } from '../../../environments/environment';
 
 interface LoginResponse {
   token: string;
+  tokenType?: string;
+  expiresIn?: number;
 }
 
 interface JwtPayload {
   sub: string;
   role: string;
+  email?: string;
   iat: number;
   exp: number;
 }
@@ -33,13 +35,15 @@ export class AuthService {
   readonly token$ = this.tokenSubject.asObservable();
   readonly isLoggedIn$ = this.token$.pipe(map(t => !!t));
 
-  login(email: string, senha: string): Observable<void> {
-    return this.http
-      .post<LoginResponse>(`${environment.apiUrl}/auth/login`, { email, senha })
-      .pipe(
-        tap(res => this.salvarToken(res.token)),
-        map(() => void 0)
-      );
+  login(cpfCnpj: string, senha: string): Observable<void> {
+    return this.loginPorCpf(cpfCnpj, senha);
+  }
+
+  loginPorCpf(cpfCnpj: string, senha: string): Observable<void> {
+    return this.autenticar('/auth/login', {
+      cpf_cnpj: cpfCnpj,
+      senha,
+    });
   }
 
   logout(): void {
@@ -61,7 +65,7 @@ export class AuthService {
         this.logout();
         return null;
       }
-      return { email: payload.sub, role: payload.role };
+      return { email: payload.email ?? payload.sub, role: payload.role };
     } catch {
       return null;
     }
@@ -78,6 +82,13 @@ export class AuthService {
   private salvarToken(token: string): void {
     localStorage.setItem(this.TOKEN_KEY, token);
     this.tokenSubject.next(token);
+  }
+
+  private autenticar(url: string, body: object): Observable<void> {
+    return this.http.post<LoginResponse>(url, body).pipe(
+      tap(res => this.salvarToken(res.token)),
+      map(() => void 0)
+    );
   }
 
   private decodificarToken(token: string): JwtPayload {

@@ -12,7 +12,7 @@ public class TokenGatewayAdapter implements TokenGateway {
     private final JwtService jwtService;
 
     @Override
-    public String generateToken(String email, String role) {
-        return jwtService.gerarToken(email, role);
+    public String generateToken(String subject, String role) {
+        return jwtService.gerarToken(subject, role);
     }
 }

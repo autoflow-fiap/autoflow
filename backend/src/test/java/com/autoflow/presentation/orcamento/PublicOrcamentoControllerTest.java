@@ -4,6 +4,7 @@ import com.autoflow.application.gateway.OrcamentoDocumentoGateway;
 import com.autoflow.application.port.in.orcamento.ConsultarOrcamentoPorTokenUseCase;
 import com.autoflow.application.port.in.orcamento.DecidirOrcamentoUseCase;
 import com.autoflow.application.port.in.ordemservico.acompanhamento.AcessarOrcamentoAcompanhamentoUseCase;
+import com.autoflow.application.policy.ClienteAtivoPolicy;
 import com.autoflow.domain.orcamento.*;
 import com.autoflow.infrastructure.security.service.CustomUserDetailsService;
 import com.autoflow.infrastructure.security.service.JwtService;
@@ -50,6 +51,9 @@ class PublicOrcamentoControllerTest {
 
     @MockitoBean
     private CustomUserDetailsService userDetailsService;
+
+    @MockitoBean
+    private ClienteAtivoPolicy clienteAtivoPolicy;
 
     @Test
     void deveBaixarPdfValidandoTokenPublico() throws Exception {

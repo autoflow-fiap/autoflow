@@ -10,4 +10,5 @@ public interface VeiculoClienteGateway {
     Optional<Long> findIdByCpfCnpj(String cpfCnpj);
 
     Optional<Long> findIdByUsuarioEmail(String email);
+
 }

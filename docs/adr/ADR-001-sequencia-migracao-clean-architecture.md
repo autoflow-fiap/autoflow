@@ -1,25 +1,23 @@
-# ADR-001 - Sequencia de migracao para Clean Architecture
+# ADR-001 — Sequência de migração para Clean Architecture
 
 ## Situacao
 
-Aceita.
+Aceita; implementação evoluída desde o contexto inicial descrito abaixo.
 
 ## Contexto
 
-O backend do AutoFlow tem como  alvo a Clean Architecture, mas o codigo atual ainda segue uma arquitetura em camadas tecnica:
+Esta decisão foi registrada durante uma etapa anterior da migração. O trecho a seguir descreve o baseline daquela etapa,
+não a estrutura atual do backend:
 
 ```text
 controller -> service -> mapper -> repository -> domain/JPA entity -> database
 ```
 
-Evidencias confirmadas no codigo:
+Evidências do baseline histórico:
 
-- `backend/src/main/java/com/autoflow` possui os pacotes `config`, `controller`, `domain`, `handler`, `mapper`, `repository` e `service`.
-- Ainda nao existem pacotes globais `application`, `infrastructure` ou `Presentation`.
-- Entidades como `ServicoEntity`, `ClienteEntity`, `VeiculoEntity`, `PecaInsumoEntity` e `OrdemServicoEntity` estao em `domain` e usam JPA.
-- Repositories Spring Data, como `ServicoRepository`, ficam em `repository` e estendem `JpaRepository`.
-- Services como `ServicoService` conhecem DTOs REST, mappers e repositories concretos.
-- OS concentra maior risco por status, historico, estoque, orcamento, notificacao, autorizacao, acompanhamento e metricas.
+- A organização então observada usava `controller`, `service`, `mapper` e `repository` como camadas técnicas.
+- Entidades JPA e serviços de aplicação ainda estavam acoplados à estrutura anterior.
+- A ordem incremental foi escolhida para preservar contratos, regras de negócio e schema enquanto cada componente era migrado.
 
 A migracao precisa acontecer sem alterar endpoints, payloads, status HTTP, autorizacao, schema de banco, migrations ou comportamento observavel. O risco principal e iniciar por OS ou mover pacotes fisicamente de forma ampla, misturando reorganizacao arquitetural com mudanca funcional.
 
@@ -54,7 +52,11 @@ Antes de migrar um componente, devem existir contrato REST caracterizado, testes
 
 Antes de migrar OS, devem estar caracterizados pelo menos abertura, inclusao de servico solicitado, atribuicao de mecanico, diagnostico, itens necessarios, laudo, orcamento, aprovacao ou recusa, execucao, baixa de estoque, historico, acompanhamento do cliente, entrega, metricas e erros principais. `OrdemServicoFluxoIT`, `OrdemServicoServiceTest` e testes de controller devem servir como baseline antes de qualquer separacao JPA/use cases em OS.
 
-## Consequencias
+## Situação observada atualmente
+
+O código atual está organizado nos pacotes `presentation`, `application`, `domain`, `infrastructure` e `config`. A documentação da estrutura e das fronteiras verificadas está em [`architecture.md`](../architecture.md). A migração estrutural descrita no contexto histórico já avançou; esta ADR permanece como registro da decisão de migrar incrementalmente e preservar contratos, não como descrição do layout atual.
+
+## Consequências
 
 Fica mais facil executar a migracao com rastreabilidade, porque a equipe passa a ter uma ordem clara, um piloto preferencial, criterios de entrada e saida por componente e uma regra explicita para adiar OS ate existir caracterizacao suficiente.
 

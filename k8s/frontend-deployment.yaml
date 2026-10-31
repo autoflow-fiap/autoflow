@@ -11,13 +11,24 @@ spec:
       app: autoflow-frontend
   template:
     metadata:
+      annotations:
+        checksum/gateway-nginx: "${gateway_nginx_hash}"
       labels:
         app: autoflow-frontend
     spec:
+      volumes:
+        - name: gateway-nginx
+          configMap:
+            name: autoflow-gateway-nginx
       containers:
         - name: autoflow-frontend-container
-          image: brunosousa06/autoflow-frontend:latest
+          image: ${dockerhub_username}/autoflow-frontend:${image_tag}
           imagePullPolicy: Always
+          volumeMounts:
+            - name: gateway-nginx
+              mountPath: /etc/nginx/templates/default.conf.template
+              subPath: default.conf.template
+              readOnly: true
           resources:
             requests:
               memory: "512Mi"
@@ -27,9 +38,6 @@ spec:
               cpu: "500m"
           ports:
             - containerPort: 8080
-          envFrom:
-            - configMapRef:
-                name: frontend-config
           readinessProbe:
             httpGet:
               path: /

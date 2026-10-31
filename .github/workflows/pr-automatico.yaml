@@ -1,0 +1,34 @@
+name: Auto Create PR to Develop
+
+on:
+  push:
+    branches-ignore:
+      - develop
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-pr:
+    name: Create Pull Request to Develop
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base develop \
+            --head "${{ github.ref_name }}" \
+            --title "Merge ${{
+              github.ref_name
+            }} into develop" \
+            --body "PR criado automaticamente após push na branch \`${{
+              github.ref_name
+            }}\`." \
+            || echo "PR já existe ou não foi possível criar."

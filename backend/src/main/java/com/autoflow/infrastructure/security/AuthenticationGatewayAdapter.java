@@ -13,9 +13,9 @@ public class AuthenticationGatewayAdapter implements AuthenticationGateway {
     private final AuthenticationManager authenticationManager;
 
     @Override
-    public void authenticate(String email, String senha) {
+    public void authenticate(String cpfCnpj, String senha) {
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(email, senha)
+                new UsernamePasswordAuthenticationToken(cpfCnpj, senha)
         );
     }
 }

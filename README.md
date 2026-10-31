@@ -1,285 +1,113 @@
 # AutoFlow
 
-Sistema de gerenciamento de ordens de serviço para oficinas mecânicas. Controla o ciclo completo de atendimento:
-abertura de OS, diagnóstico, orçamento, execução e encerramento, com controle de acesso por perfil e área do cliente.
+Sistema de gerenciamento de ordens de serviço para oficinas. A aplicação reúne uma SPA Angular e um backend Spring Boot
+organizado em Clean Architecture. Implementa cadastro e consulta operacional de clientes, veículos, usuários, serviços e
+ordens de serviço, além de orçamento público e acompanhamento de status. O schema PostgreSQL é mantido por migrations
+Flyway neste repositório.
 
----
+## Tecnologias e papel na arquitetura
 
-## Estrutura do Repositório
+- Backend: Java 21, Spring Boot 3.5, Spring Security, JPA e Flyway.
+- Frontend: Angular 17, TypeScript e Angular Material.
+- Execução: Docker, Kubernetes e Terraform; CI/CD por GitHub Actions.
+- Observabilidade: agente New Relic, logs JSON correlacionados e eventos de negócio.
 
+O Terraform deste repositório gerencia workloads e serviços Kubernetes, ConfigMaps, HPA e configuração Nginx. O
+`autoflow-infra` declara VPC/EKS, API Gateway HTTP API v2, VPC Link, ALB interno e integração New Relic;
+`autoflow-db` provisiona o RDS; `autoflow-lambda` mantém a autenticação serverless.
+
+```mermaid
+flowchart LR
+  Browser[Navegador / Angular] -->|HTTPS e rotas de negócio| API[API Gateway HTTP API v2]
+  API -->|POST /auth/login| Lambda[Lambda CPF/CNPJ e JWT]
+  API -->|VPC Link| ALB[ALB interno]
+  ALB --> FE[Nginx / frontend no EKS]
+  ALB --> BE[Spring Boot no EKS]
+  Lambda --> DB[(RDS PostgreSQL)]
+  BE --> DB
+  BE -.->|APM, logs e métricas — se habilitados| NR[New Relic]
 ```
-autoflow/
-├── backend/    # API REST — Java 21 + Spring Boot
-└── frontend/   # SPA — Angular 17 + Angular Material
-```
 
----
+Para a arquitetura C4, rede, autenticação e integração entre os serviços, consulte
+[arquitetura do API Gateway](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/api-gateway/arquitetura.md).
+O fluxo de abertura da OS está em [fluxo_principal.mermaid](docs/diagramas-sequencia/fluxo_principal.mermaid).
 
-## Documentação do Projeto
+## Executar e validar localmente
 
-Este README é o ponto de entrada da entrega. Para os detalhes técnicos, consulte:
-
-- [Backend](backend/README.md): API Spring Boot, configuração, testes, Swagger e Docker.
-- [Frontend](frontend/README.md): aplicação Angular, rotas, configuração e execução.
-- [Arquitetura do backend](docs/architecture.md).
-- [Diagramas de sequência](docs/diagramas-sequencia/diagrama-sequencia.md).
-- [Fluxo de orçamento público](docs/fluxo-orcamento-publico.md).
-- [Contrato OpenAPI versionado](docs/openapi/autoflow-api.json) e [documentação da API](docs/openapi/README.md).
-
----
-
-## Stack
-
-Java 21 e Spring Boot; Angular; PostgreSQL; Docker; Kubernetes; Terraform; GitHub Actions; OpenAPI/Swagger;
-JUnit, SonarQube e Snyk.
-
----
-
-## Arquitetura
-
-### Backend — Clean Architecture
-
-O AutoFlow é um monólito Spring Boot organizado segundo a Clean Architecture. O backend possui as camadas
-`presentation`, `application`, `domain`, `infrastructure` e `config`.
-
-A direção principal das dependências é `presentation → application → domain`. A camada `infrastructure` implementa
-detalhes técnicos e as portas definidas pela `application`, enquanto `config` realiza a composição da aplicação.
-
-Os detalhes da organização e das regras arquiteturais estão em [`docs/architecture.md`](docs/architecture.md).
-
-### Frontend — Angular Standalone + Signals
-
-O frontend usa componentes standalone, lazy loading, Signals, guards funcionais e interceptors JWT. Para rotas,
-estrutura e instruções específicas, consulte o [README do frontend](frontend/README.md).
-
----
-
-## Funcionalidades
-
-O sistema oferece cadastro de clientes, veículos, serviços e peças; abertura e execução de ordens de serviço;
-orçamentos com PDF e aprovação autenticada ou pública; reparos adicionais; notificações por e-mail; e área do cliente.
-
----
-
-## Usuários e perfis de demonstração
-
-Para a demonstração local da pós-graduação, o seed cria as contas abaixo. Todas usam a senha de exemplo `Senha@1234`:
-
-| E-mail                   | Perfil      |
-|--------------------------|-------------|
-| `admin@autoflow.com`     | `ADMIN`     |
-| `atendente@autoflow.com` | `ATENDENTE` |
-| `mecanico1@autoflow.com` | `MECANICO`  |
-| `mecanico2@autoflow.com` | `MECANICO`  |
-| `cliente@autoflow.com`   | `CLIENTE`   |
-
-São credenciais de demonstração acadêmica/local e não devem ser usadas em produção.
-
----
-
-## Principais Fluxos
-
-O sistema cobre o ciclo completo da OS, geração e aprovação de orçamentos, download de PDF, reparos adicionais e
-acompanhamento público por token. Consulte os [diagramas de sequência](docs/diagramas-sequencia/diagrama-sequencia.md)
-e o [fluxo de orçamento público](docs/fluxo-orcamento-publico.md) para os detalhes.
-
-Para rotas, estrutura e instruções específicas da aplicação web, consulte o [README do frontend](frontend/README.md).
-
----
-
-## Execução local
-
-Pré-requisitos: Java 21, Maven, Node.js 20, npm, PostgreSQL e, opcionalmente, Docker. Os detalhes de cada aplicação
-estão nos READMEs do [backend](backend/README.md) e do [frontend](frontend/README.md).
+Requisitos: Java 21, Maven, Node.js 20+, npm 10+ e PostgreSQL. Para subir a stack Compose, configure um `.env` local
+com os valores necessários à [aplicação e ao banco local](docs/variables-and-secrets.md) e execute:
 
 ```bash
-# backend
+docker compose up -d --build
+```
+
+Sem Compose, inicie o backend com PostgreSQL configurado e, em outro terminal, o frontend:
+
+```bash
 cd backend
 mvn spring-boot:run
 
-# frontend, em outro terminal
+# Em outro terminal
 cd frontend
-npm install
+npm ci
 npm start
 ```
 
-O backend fica disponível em `http://localhost:8081` e o frontend em `http://localhost:4200`.
+O backend local usa `http://localhost:8081`; o frontend usa `http://localhost:4200`. Testes e comandos adicionais estão
+nos READMEs de [backend](backend/README.md), [frontend](frontend/README.md) e no [guia de qualidade](docs/testing-and-quality.md).
 
-## Docker Compose
+Os [Dockerfiles do backend](backend/Dockerfile) e [frontend](frontend/Dockerfile) são usados para build das imagens.
+O CI constrói as imagens sem publicá-las.
 
-Na raiz do repositório, suba a stack completa com:
+Para Kubernetes local, use Minikube, Kind ou Kubernetes do Docker Desktop. O perfil e o exemplo de Secret sem credenciais
+estão em [`k8s-local/`](k8s-local/); não reutilize valores locais em AWS.
 
-```bash
-docker-compose up -d
-```
+## API, autenticação e banco
 
-## Kubernetes local
+- [OpenAPI versionado e guia da API](docs/openapi/README.md)
+- [Especificação OpenAPI JSON](docs/openapi/autoflow-api.json)
+- [Coleção Postman de autenticação CPF/JWT](backend/postman/autoflow-serverless-auth.postman_collection.json)
+- Swagger local: <http://localhost:8081/swagger-ui.html>; OpenAPI em <http://localhost:8081/v3/api-docs>.
+- Diagrama ER e justificativa PostgreSQL: [autoflow-db](https://github.com/autoflow-fiap/autoflow-db/blob/develop/docs/diagrama-er.md)
+  e [RFC-001](https://github.com/autoflow-fiap/autoflow-db/blob/develop/docs/RFC-001.md).
 
-Os [manifestos Kubernetes da entrega](k8s/) e o perfil local em [k8s-local/](k8s-local/) estão versionados no
-repositório. É necessário ter Minikube, Kind ou Kubernetes habilitado no Docker Desktop.
+O login serverless recebe CPF/CNPJ e senha no API Gateway, que invoca a Lambda. Rotas de negócio usam Bearer JWT; o
+backend valida assinatura, claims, estado e perfil atual do usuário. O contrato e os cenários de teste estão no guia
+OpenAPI e na [sequência de autenticação](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/api-gateway/arquitetura.md).
 
-```bash
-cd k8s-local
-minikube start
-kubectl apply -f configmap.yaml
-kubectl apply -f secret.yaml
-kubectl apply -f postgresql-service.yaml
-kubectl apply -f postgresql-stateful.yaml
-kubectl apply -f .
-kubectl get pods
-```
+O backend envia notificações de ordens de serviço por SMTP.
 
-O frontend fica disponível em `http://localhost:30180` e o backend em `http://localhost:30080`.
+## Implantação e CI/CD
 
----
+`develop` corresponde a `homolog`; `main`, a `production`. A ordem de dependências é VPC/EKS, RDS, Lambda, API Gateway,
+aplicação e New Relic. Os workflows são independentes; consulte [operação de CI/CD](.github/CI-CD-AWS.md) e
+[Variables e Secrets](docs/variables-and-secrets.md).
 
-## Terraform na AWS
+- `ci.yml` valida Pull Requests para `develop`/`main` e pushes para `develop`, `main` e `feature/**`: testes, builds,
+  análise estática/segurança e Terraform sem Apply AWS.
+- `pipeline.yml` recebe `push` em `develop`/`main`. O caminho automático exige a Repository Variable correspondente
+  (`AUTO_CD_ENABLED_HOMOLOG` ou `AUTO_CD_ENABLED_PRODUCTION`) igual a `true` e sucesso da CI para o mesmo SHA; executa
+  Plan, não publica imagens nem aplica recursos.
+- No `workflow_dispatch`, `apply=false` executa Plan. `apply=true` publica imagens com tag SHA, gera Plan e solicita
+  aprovação separada para Apply e rollout. Smoke tests são executados após o Apply ou por dispatch com
+  `smoke_tests_only=true`.
+- Os smoke tests usam o Environment validado pelo gate (`homolog` para `develop`, `production` para `main`), inclusive
+  na execução isolada. A proteção configurada para esse Environment também se aplica ao job.
+- Apply exige `TERRAFORM_APPLY_APPROVAL_CONFIGURED=true` e usa o GitHub Environment selecionado (`homolog` ou
+  `production`); configure Required reviewers e restrições de branch nesses Environments. `main` exige proteção de branch.
+- `pr-automatico.yaml` cria Pull Request para `develop` conforme seus filtros.
 
-O código está em [infra/](infra/). Com o Terraform e as credenciais da AWS configurados fora do repositório, execute:
+Configure proteção de branch em `develop` e `main` para exigir Pull Request e checks da CI.
 
-```bash
-cd infra
-terraform init
-terraform plan
-terraform apply
-```
+O Terraform declara o HPA do backend entre 1 e 3 réplicas, com alvo médio de CPU de 50%; o cluster deve expor
+`metrics.k8s.io` para o autoscaling funcionar. O agente APM Java usa `ENABLE_NEWRELIC_APM`; monitoramento Kubernetes,
+dashboards, alertas e Synthetic são gerenciados pelo root `autoflow-infra` conforme suas Variables.
 
----
+## Documentação relacionada
 
-## API e OpenAPI
-
-O [contrato OpenAPI versionado](docs/openapi/autoflow-api.json) é o artefato distribuível da API; a [documentação da
-API](docs/openapi/README.md) detalha seu uso. Com o backend em execução, acesse [`http://localhost:8081/swagger-ui.html`](http://localhost:8081/swagger-ui.html)
-ou [`http://localhost:8081/v3/api-docs`](http://localhost:8081/v3/api-docs).
-
----
-
-## Segurança
-
-O acesso é controlado por JWT e perfis (`ADMIN`, `ATENDENTE`, `MECANICO` e `CLIENTE`), com endpoints públicos e
-privados segregados. Não são mantidas credenciais, tokens ou valores reais de ambiente neste README.
-
----
-
-## Qualidade de Código
-
-Testes automatizados e análises de qualidade e segurança usam JUnit, SonarQube, JaCoCo e Snyk.
-
-## Fluxo do CI/CD
-
-O [pipeline do GitHub Actions](.github/workflows/pipeline.yml) executa testes, análises de qualidade e segurança,
-builds do backend e frontend, criação e publicação de imagens Docker e deploy via Terraform em AWS/EKS.
-
-```text
-                     ┌─────────────────────┐
-                     │     Pull Request    │
-                     │  develop / main     │
-                     └──────────┬──────────┘
-                                │
-                                ▼
-                ┌──────────────────────────────┐
-                │ Backend Tests + SonarQube    │
-                │ - Maven                      │
-                │ - Testcontainers             │
-                │ - JaCoCo                     │
-                │ - SonarQube Quality Gate     │
-                └──────────────┬───────────────┘
-                               │
-              ┌────────────────┴────────────────┐
-              ▼                                 ▼
-    ┌──────────────────┐              ┌──────────────────┐
-    │  Backend Build   │              │ Frontend Tests   │
-    │  mvn package     │              │ npm test         │
-    └────────┬─────────┘              └────────┬─────────┘
-             │                                  │
-             │                                  ▼
-             │                         ┌──────────────────┐
-             │                         │ Frontend Build   │
-             │                         │ npm run build    │
-             │                         └────────┬─────────┘
-             │                                  │
-             └────────────────┬─────────────────┘
-                              │
-                              ▼
-                ┌──────────────────────────────┐
-                │      Push na develop?        │
-                └──────────────┬───────────────┘
-                               │ Sim
-                               ▼
-                ┌──────────────────────────────┐
-                │       Snyk Security Scan     │
-                │ - Open Source dependencies   │
-                │ - Docker image               │
-                └──────────────┬───────────────┘
-                               │
-                               ▼
-                ┌──────────────────────────────┐
-                │      Docker Build & Push     │
-                │                              │
-                │  Backend → Docker Hub        │
-                │  Frontend → Docker Hub       │
-                └──────────────┬───────────────┘
-                               │
-                               ▼
-                ┌──────────────────────────────┐
-                │       Terraform Deploy       │
-                │                              │
-                │  Terraform Init              │
-                │  Terraform Validate          │
-                │  Terraform Plan              │
-                │  Terraform Apply             │
-                └──────────────┬───────────────┘
-                               │
-                               ▼
-                     ┌────────────────────┐
-                     │    AWS / EKS       │
-                     │                    │
-                     │ Infrastructure +   │
-                     │ Kubernetes         │
-                     └────────────────────┘
-```
-
----
-
-## Entrega — Tech Challenge Fase 2
-
-### Objetivos da Fase 2
-
-Evoluir o AutoFlow com Clean Architecture, testes automatizados, APIs operacionais, infraestrutura como código, CI/CD,
-deploy em Kubernetes e escalabilidade automática.
-
-### Arquitetura de deploy
-
-O deploy combina GitHub Actions, Docker Hub, Terraform, AWS EKS, RDS PostgreSQL, ConfigMaps, Secrets e HPA. O HPA do
-backend foi aplicado manualmente em produção para a demonstração, conforme o [manifesto k8s/hpa.yaml](k8s/hpa.yaml).
-
-```mermaid
-flowchart TD
-    A["Push ou Pull Request<br/>develop / main"] --> B["Testes backend + SonarQube<br/>Maven · Testcontainers · JaCoCo"]
-    A --> C["Testes frontend<br/>npm test"]
-
-    B --> D["Build backend<br/>mvn package"]
-    C --> E["Build frontend<br/>npm run build"]
-
-    A --> F{"Push na branch develop?"}
-    F -->|Sim| G["Snyk Security Scan<br/>dependências e imagens"]
-
-    D --> H["Docker Build & Push<br/>Backend e Frontend no Docker Hub"]
-    E --> H
-    F -->|Sim| H
-
-    H --> I["Terraform Deploy<br/>init · validate · plan · apply"]
-    I --> J["AWS / EKS<br/>Infraestrutura e recursos Kubernetes"]
-```
-
-Consulte a [fonte Mermaid do diagrama](docs/diagramas-arquitetura/arquitetura-deploy-fase-2.mermaid) e a [documentação
-detalhada da arquitetura de deploy](docs/diagramas-arquitetura/README.md).
-
-### Evidências da entrega
-
-- [Manifestos Kubernetes](k8s/)
-- [Código Terraform](infra/)
-- [Pipeline GitHub Actions](.github/workflows/pipeline.yml)
-- [Contrato OpenAPI versionado](docs/openapi/autoflow-api.json)
-- [Documentação da API](docs/openapi/README.md)
-- [Vídeo demonstrativo da Fase 2](https://youtu.be/ObUkVeYQCOA)
+- [Arquitetura e limites das camadas](docs/architecture.md)
+- [Diagramas de sequência](docs/diagramas-sequencia/diagrama-sequencia.md)
+- [Fluxo de orçamento público](docs/fluxo-orcamento-publico.md)
+- [ADR-001 — migração para Clean Architecture](docs/adr/ADR-001-sequencia-migracao-clean-architecture.md)
+- [ADR-002 — Kubernetes e Terraform](docs/adr/ADR-002-adocao-kubernetes-terraform.md)
+- [Recursos New Relic declarados pela infraestrutura](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/infra/newrelic/README.md)

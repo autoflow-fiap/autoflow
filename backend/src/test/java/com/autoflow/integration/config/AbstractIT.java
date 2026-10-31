@@ -2,6 +2,7 @@ package com.autoflow.integration.config;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.autoflow.infrastructure.security.service.JwtService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -51,6 +52,9 @@ public abstract class AbstractIT {
     @Autowired
     protected PasswordEncoder passwordEncoder;
 
+    @Autowired
+    protected JwtService jwtService;
+
     protected void limparBancoDeDados() {
         jdbcTemplate.execute("""
             DO $$ DECLARE r RECORD;
@@ -79,14 +83,16 @@ public abstract class AbstractIT {
         } else {
             // /auth/cadastro restringe cadastro público a CLIENTE; inserimos staff diretamente
             jdbcTemplate.update(
-                    "INSERT INTO usuarios (nome, email, senha, role) VALUES (?, ?, ?, ?)",
-                    "Usuario Teste", email, passwordEncoder.encode("Senha@1234"), role
+                    "INSERT INTO usuarios (nome, cpf_cnpj, email, senha, role) VALUES (?, ?, ?, ?, ?)",
+                    "Usuario Teste", cpfCnpj, email, passwordEncoder.encode("Senha@1234"), role
             );
         }
 
-        Map<String, Object> login = Map.of("email", email, "senha", "Senha@1234");
-        ResponseEntity<String> resp = restTemplate.postForEntity("/auth/login", jsonEntity(login), String.class);
-        return extrairCampo(resp.getBody(), "token");
+        return gerarToken(cpfCnpj, role);
+    }
+
+    protected String gerarToken(String cpfCnpj, String role) {
+        return jwtService.gerarToken(cpfCnpj, role);
     }
 
     protected HttpEntity<Object> jsonEntity(Object body) {

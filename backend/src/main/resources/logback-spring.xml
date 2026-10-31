@@ -1,0 +1,29 @@
+<configuration>
+    <springProperty scope="context" name="serviceName" source="spring.application.name"/>
+    <springProperty scope="context" name="deploymentEnvironment" source="app.observability.environment"/>
+
+    <appender name="STDOUT_JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.out</target>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <timeZone>UTC</timeZone>
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <level>level</level>
+                <logger>logger</logger>
+                <message>message</message>
+                <stackTrace>exception.type</stackTrace>
+            </fieldNames>
+            <customFields>{"service.name":"${serviceName}","deployment.environment":"${deploymentEnvironment}"}</customFields>
+            <includeContext>false</includeContext>
+            <includeMdc>true</includeMdc>
+            <includeMdcKeyName>request.id</includeMdcKeyName>
+            <includeMdcKeyName>trace.id</includeMdcKeyName>
+            <includeMdcKeyName>span.id</includeMdcKeyName>
+            <throwableConverter class="com.autoflow.infrastructure.observability.SafeThrowableConverter"/>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT_JSON"/>
+    </root>
+</configuration>

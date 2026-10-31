@@ -103,6 +103,7 @@ class FinalizarDiagnosticoUseCaseTest {
     private Usuario usuario(RoleEnum role) {
         var usuario = new Usuario();
         usuario.setEmail(role == RoleEnum.ADMIN ? "admin@autoflow.com" : "mecanico@autoflow.com");
+        usuario.setCpfCnpj(role == RoleEnum.ADMIN ? "52998224725" : "12345678909");
         usuario.setRole(role);
         return usuario;
     }

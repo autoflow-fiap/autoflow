@@ -42,4 +42,31 @@ backend/.m2
 *.terraform/
 *terraform/
 */terraform*
+!infra/.terraform.lock.hcl
 !docs/terraform.md
+
+/docs/*
+!/docs/variables-and-secrets.md
+!/docs/variables-changelog.md
+!/docs/validacao-autenticacao-serverless.md
+!/docs/manual-configuracao-aws-ci-cd.md
+!/docs/kong-gateway-operations.md
+.agent/*
+
+### Terraform: state, planos e configuração local sensível ###
+*.tfstate*
+*.tfvars*
+backend.*.hcl
+*.tfplan*
+*.plan*
+__pycache__/
+*.py[cod]
+crash.log
+crash.*.log
+.terraform.tfstate.lock.info
+.aws/
+credentials
+.env.*
+# Manifests Secret com conteúdo sensível não devem ser versionados
+/k8s/secret.yaml
+/k8s-local/secret.yaml

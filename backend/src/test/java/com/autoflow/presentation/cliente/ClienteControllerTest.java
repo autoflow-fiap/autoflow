@@ -3,6 +3,7 @@ package com.autoflow.presentation.cliente;
 import com.autoflow.application.input.cliente.ClienteInput;
 import com.autoflow.application.output.cliente.ClienteOutput;
 import com.autoflow.application.port.in.cliente.*;
+import com.autoflow.domain.cliente.ClienteStatus;
 import com.autoflow.presentation.cliente.mapper.ClienteControllerMapper;
 import com.autoflow.presentation.cliente.mapper.ClienteControllerMapperImpl;
 import com.autoflow.presentation.cliente.request.ClienteRequest;
@@ -43,7 +44,7 @@ class ClienteControllerTest {
     private CriarClienteUseCase criarClienteUseCase;
 
     @Mock
-    private BuscarClientePorEmailUseCase buscarClientePorEmailUseCase;
+        private BuscarClientePorEmailUseCase buscarClientePorEmailUseCase;
 
     @Mock
     private BuscarClientePorIdUseCase buscarClientePorIdUseCase;
@@ -59,6 +60,9 @@ class ClienteControllerTest {
 
     @Mock
     private ListarClienteUseCase listarClienteUseCase;
+
+    @Mock
+    private AlterarStatusClienteUseCase alterarStatusClienteUseCase;
 
     private ClienteControllerMapper clienteMapper;
 
@@ -79,6 +83,7 @@ class ClienteControllerTest {
                 atualizarClienteUseCase,
                 deletarClienteUseCase,
                 listarClienteUseCase,
+                alterarStatusClienteUseCase,
                 clienteMapper
         );
 
@@ -100,6 +105,7 @@ class ClienteControllerTest {
                 .cpfCnpj("52998224725")
                 .telefone("12312321321")
                 .email("bruno@hotmail.com")
+                .status(ClienteStatus.ATIVO)
                 .build();
     }
 
@@ -130,7 +136,8 @@ class ClienteControllerTest {
                     .andExpect(jsonPath("$.nome").value("Bruno"))
                     .andExpect(jsonPath("$.cpfCnpj").value("52998224725"))
                     .andExpect(jsonPath("$.telefone").value("12312321321"))
-                    .andExpect(jsonPath("$.email").value("bruno@hotmail.com"));
+                    .andExpect(jsonPath("$.email").value("bruno@hotmail.com"))
+                    .andExpect(jsonPath("$.status").value("ATIVO"));
 
             verify(buscarClientePorEmailUseCase)
                     .execute("bruno@hotmail.com");
@@ -168,6 +175,7 @@ class ClienteControllerTest {
         assertEquals("52998224725", input.cpfCnpj());
         assertEquals("12312321321", input.telefone());
         assertEquals("bruno@hotmail.com", input.email());
+        assertEquals(ClienteStatus.ATIVO, input.status());
     }
 
     @Test
@@ -222,6 +230,21 @@ class ClienteControllerTest {
         assertEquals("52998224725", input.cpfCnpj());
         assertEquals("12312321321", input.telefone());
         assertEquals("bruno@hotmail.com", input.email());
+        assertEquals(ClienteStatus.ATIVO, input.status());
+    }
+
+    @Test
+    void deveAlterarStatusDoCliente() throws Exception {
+        when(alterarStatusClienteUseCase.execute(eq(1L), any()))
+                .thenReturn(clienteOutput);
+
+        mockMvc.perform(patch("/clientes/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ATIVO\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ATIVO"));
+
+        verify(alterarStatusClienteUseCase).execute(eq(1L), any());
     }
 
     @Test

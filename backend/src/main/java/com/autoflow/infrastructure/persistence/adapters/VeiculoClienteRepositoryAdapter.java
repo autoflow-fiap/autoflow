@@ -22,4 +22,5 @@ public class VeiculoClienteRepositoryAdapter implements VeiculoClienteGateway {
     public Optional<Long> findIdByUsuarioEmail(String email) {
         return clienteRepository.findByUsuarioEmail(email).map(cliente -> cliente.getId());
     }
+
 }

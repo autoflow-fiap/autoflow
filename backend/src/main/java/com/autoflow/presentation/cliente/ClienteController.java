@@ -6,6 +6,7 @@ import com.autoflow.application.output.cliente.ClienteOutput;
 import com.autoflow.application.port.in.cliente.*;
 import com.autoflow.presentation.cliente.mapper.ClienteControllerMapper;
 import com.autoflow.presentation.cliente.request.ClienteRequest;
+import com.autoflow.presentation.cliente.request.ClienteStatusRequest;
 import com.autoflow.presentation.cliente.response.ClienteResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -34,6 +35,7 @@ public class ClienteController {
     private final AtualizarClienteUseCase atualizarClienteUseCase;
     private final DeletarClienteUseCase deletarClienteUseCase;
     private final ListarClienteUseCase listarClienteUseCase;
+    private final AlterarStatusClienteUseCase alterarStatusClienteUseCase;
     private final ClienteControllerMapper clienteMapper;
 
 
@@ -102,6 +104,23 @@ public class ClienteController {
         ClienteOutput output = atualizarClienteUseCase.execute(id, input);
         ClienteResponse response = clienteMapper.toResponse(output);
         return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "Alterar status do cliente", description = "Ativa ou desativa um cliente. Permissão: ADMIN.")
+    @ApiResponse(responseCode = "200", description = "Status do cliente alterado com sucesso")
+    @ApiResponse(responseCode = "400", description = "Status inválido")
+    @ApiResponse(responseCode = "404", description = "Cliente não encontrado")
+    @ApiResponse(responseCode = "401", description = "Usuário não autenticado")
+    @ApiResponse(responseCode = "403", description = "Usuário sem permissão para executar a operação")
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ClienteResponse> alterarStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody ClienteStatusRequest request) {
+        ClienteOutput output = alterarStatusClienteUseCase.execute(
+                id,
+                clienteMapper.toStatusInput(request));
+        return ResponseEntity.ok(clienteMapper.toResponse(output));
     }
 
     @Operation(summary = "Deletar um cliente", description = "Deleta um cliente pelo seu ID")

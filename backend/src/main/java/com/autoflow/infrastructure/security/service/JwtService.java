@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 @Service
@@ -20,22 +21,22 @@ public class JwtService {
     private Long expiration;
 
     private SecretKey getKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes());
+        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public String gerarToken(String email, String role) {
+    public String gerarToken(String cpfCnpj, String role) {
 
         Instant agora = Instant.now();
         return Jwts.builder()
-                .subject(email)
+                .subject(cpfCnpj)
                 .claim("role", role)
                 .issuedAt(Date.from(agora))
                 .expiration(Date.from(agora.plusMillis(expiration)))
-                .signWith(getKey())
+                .signWith(getKey(), Jwts.SIG.HS256)
                 .compact();
     }
 
-    public String extrairEmail(String token) {
+    public String extrairCpfCnpj(String token) {
         return extrairClaims(token).getSubject();
     }
 

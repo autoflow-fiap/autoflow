@@ -93,6 +93,15 @@
           <td mat-cell *matCellDef="let c">{{ c.email }}</td>
         </ng-container>
 
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let c">
+            <mat-chip [class]="'status-chip status-' + c.status">
+              {{ labelStatus(c.status) }}
+            </mat-chip>
+          </td>
+        </ng-container>
+
         <ng-container matColumnDef="acoes">
           <th mat-header-cell *matHeaderCellDef class="col-acoes">Ações</th>
           <td mat-cell *matCellDef="let c" class="col-acoes">
@@ -105,6 +114,15 @@
               <mat-icon>edit</mat-icon>
             </button>
             @if (isAdmin) {
+              <button
+                mat-icon-button
+                [color]="c.status === 'ATIVO' ? 'warn' : 'primary'"
+                [matTooltip]="c.status === 'ATIVO' ? 'Desativar cliente' : 'Ativar cliente'"
+                [attr.aria-label]="c.status === 'ATIVO' ? 'Desativar cliente' : 'Ativar cliente'"
+                (click)="confirmarAlteracaoStatus(c)"
+              >
+                <mat-icon>{{ c.status === 'ATIVO' ? 'person_off' : 'person' }}</mat-icon>
+              </button>
               <button
                 mat-icon-button
                 color="warn"

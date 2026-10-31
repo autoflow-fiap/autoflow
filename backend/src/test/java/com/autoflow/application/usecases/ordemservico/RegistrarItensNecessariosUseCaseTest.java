@@ -115,6 +115,7 @@ class RegistrarItensNecessariosUseCaseTest {
         var usuario = new Usuario();
         usuario.setRole(role);
         usuario.setEmail(email);
+        usuario.setCpfCnpj("12345678901");
         return usuario;
     }
 }

@@ -2,6 +2,7 @@ package com.autoflow.mapper;
 
 import com.autoflow.application.input.cliente.ClienteInput;
 import com.autoflow.application.output.cliente.ClienteOutput;
+import com.autoflow.domain.cliente.ClienteStatus;
 import com.autoflow.infrastructure.persistence.entity.cliente.ClienteEntity;
 import com.autoflow.infrastructure.persistence.mapper.ClienteMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +34,7 @@ class ClienteMapperTest {
         assertEquals(input.cpfCnpj(), entity.getCpfCnpj());
         assertEquals(input.telefone(), entity.getTelefone());
         assertEquals(input.email(), entity.getEmail());
+        assertEquals(ClienteStatus.ATIVO, entity.getStatus());
     }
 
     @Test
@@ -43,6 +45,7 @@ class ClienteMapperTest {
         entity.setCpfCnpj("12345678901");
         entity.setTelefone("999999999");
         entity.setEmail("teste@email.com");
+        entity.setStatus(ClienteStatus.INATIVO);
 
         ClienteOutput output = mapper.mapToOutput(entity);
 
@@ -52,6 +55,7 @@ class ClienteMapperTest {
         assertEquals(entity.getCpfCnpj(), output.cpfCnpj());
         assertEquals(entity.getTelefone(), output.telefone());
         assertEquals(entity.getEmail(), output.email());
+        assertEquals(ClienteStatus.INATIVO, output.status());
     }
 
     @Test
@@ -59,6 +63,7 @@ class ClienteMapperTest {
         ClienteInput input = new ClienteInput("Nome Atualizado", "98765432109", "777777777", "atualizado@email.com");
         ClienteEntity entity = new ClienteEntity();
         entity.setId(1L);
+        entity.setStatus(ClienteStatus.INATIVO);
 
         mapper.updateEntity(input, entity);
 
@@ -67,6 +72,7 @@ class ClienteMapperTest {
         assertEquals(input.cpfCnpj(), entity.getCpfCnpj());
         assertEquals(input.telefone(), entity.getTelefone());
         assertEquals(input.email(), entity.getEmail());
+        assertEquals(ClienteStatus.INATIVO, entity.getStatus());
     }
 
     @Test

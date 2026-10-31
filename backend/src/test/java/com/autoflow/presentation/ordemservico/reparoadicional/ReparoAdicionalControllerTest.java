@@ -3,6 +3,7 @@ package com.autoflow.presentation.ordemservico.reparoadicional;
 import com.autoflow.application.input.ordemservico.reparoadicional.CriarReparoAdicionalCommand;
 import com.autoflow.application.output.ordemservico.reparoadicional.CriarReparoAdicionalOutput;
 import com.autoflow.application.port.in.ordemservico.reparoadicional.CriarReparoAdicionalUseCase;
+import com.autoflow.application.policy.ClienteAtivoPolicy;
 import com.autoflow.infrastructure.security.service.CustomUserDetailsService;
 import com.autoflow.infrastructure.security.service.JwtService;
 import org.junit.jupiter.api.Test;
@@ -59,6 +60,9 @@ class ReparoAdicionalControllerTest {
 
     @MockitoBean
     private CustomUserDetailsService userDetailsService;
+
+    @MockitoBean
+    private ClienteAtivoPolicy clienteAtivoPolicy;
 
     @Test
     @WithMockUser(username = "mecanico@autoflow.com", roles = "MECANICO")

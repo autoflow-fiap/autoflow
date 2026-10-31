@@ -1,5 +1,6 @@
 package com.autoflow.config.security.service;
 
+import com.autoflow.application.policy.ClienteAtivoPolicy;
 import com.autoflow.domain.usuario.RoleEnum;
 import com.autoflow.infrastructure.persistence.entity.usuario.UsuarioEntity;
 import com.autoflow.infrastructure.persistence.repository.UsuarioRepository;
@@ -25,6 +26,9 @@ class CustomUserDetailsServiceTest {
     @Mock
     private UsuarioRepository usuarioRepository;
 
+    @Mock
+    private ClienteAtivoPolicy clienteAtivoPolicy;
+
     @InjectMocks
     private CustomUserDetailsService customUserDetailsService;
 
@@ -36,25 +40,26 @@ class CustomUserDetailsServiceTest {
         usuario = new UsuarioEntity();
         usuario.setId(1L);
         usuario.setEmail("admin@email.com");
+        usuario.setCpfCnpj("12345678980");
         usuario.setSenha("senhaCriptografada");
         usuario.setRole(RoleEnum.ADMIN);
     }
 
     @Test
-    void deveCarregarUsuarioPorEmail() {
+    void deveCarregarUsuarioPorCpfCnpjParaLoginInterno() {
 
-        when(usuarioRepository.findByEmail("admin@email.com"))
+        when(usuarioRepository.findByCpfCnpj("12345678980"))
                 .thenReturn(Optional.of(usuario));
 
         UserDetails resultado =
                 customUserDetailsService.loadUserByUsername(
-                        "admin@email.com"
+                        "12345678980"
                 );
 
         assertNotNull(resultado);
 
         assertEquals(
-                "admin@email.com",
+                    "admin@email.com",
                 resultado.getUsername()
         );
 
@@ -72,21 +77,47 @@ class CustomUserDetailsServiceTest {
         );
 
         verify(usuarioRepository)
-                .findByEmail("admin@email.com");
+                .findByCpfCnpj("12345678980");
+    }
+
+    @Test
+    void deveCarregarClienteAtivoHabilitado() {
+        usuario.setEmail("cliente@email.com");
+        usuario.setCpfCnpj("12345678980");
+        usuario.setRole(RoleEnum.CLIENTE);
+        when(usuarioRepository.findByCpfCnpj(usuario.getCpfCnpj())).thenReturn(Optional.of(usuario));
+        when(clienteAtivoPolicy.podeAutenticar(usuario.getCpfCnpj(), true)).thenReturn(true);
+
+        UserDetails resultado = customUserDetailsService.loadUserByCpfCnpj(usuario.getCpfCnpj());
+
+        assertTrue(resultado.isEnabled());
+    }
+
+    @Test
+    void deveCarregarClienteInativoDesabilitado() {
+        usuario.setEmail("cliente@email.com");
+        usuario.setCpfCnpj("12345678980");
+        usuario.setRole(RoleEnum.CLIENTE);
+        when(usuarioRepository.findByCpfCnpj(usuario.getCpfCnpj())).thenReturn(Optional.of(usuario));
+        when(clienteAtivoPolicy.podeAutenticar(usuario.getCpfCnpj(), true)).thenReturn(false);
+
+        UserDetails resultado = customUserDetailsService.loadUserByCpfCnpj(usuario.getCpfCnpj());
+
+        assertFalse(resultado.isEnabled());
     }
 
     @Test
     void deveLancarExcecaoQuandoUsuarioNaoEncontrado() {
 
-        when(usuarioRepository.findByEmail("inexistente@email.com"))
+        when(usuarioRepository.findByCpfCnpj("12345678980"))
                 .thenReturn(Optional.empty());
 
         UsernameNotFoundException exception =
                 assertThrows(
                         UsernameNotFoundException.class,
                         () -> customUserDetailsService
-                                .loadUserByUsername(
-                                        "inexistente@email.com"
+                                .loadUserByCpfCnpj(
+                                        "12345678980"
                                 )
                 );
 
@@ -96,6 +127,6 @@ class CustomUserDetailsServiceTest {
         );
 
         verify(usuarioRepository)
-                .findByEmail("inexistente@email.com");
+                .findByCpfCnpj("12345678980");
     }
 }

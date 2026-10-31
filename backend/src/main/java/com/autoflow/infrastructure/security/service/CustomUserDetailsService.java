@@ -1,5 +1,7 @@
 package com.autoflow.infrastructure.security.service;
 
+import com.autoflow.application.policy.ClienteAtivoPolicy;
+import com.autoflow.domain.usuario.RoleEnum;
 import com.autoflow.infrastructure.persistence.entity.usuario.UsuarioEntity;
 import com.autoflow.infrastructure.persistence.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,19 +19,32 @@ import java.util.List;
 public class CustomUserDetailsService implements UserDetailsService {
 
     private final UsuarioRepository usuarioRepository;
+    private final ClienteAtivoPolicy clienteAtivoPolicy;
 
     @Override
-    public UserDetails loadUserByUsername(String email)
+    public UserDetails loadUserByUsername(String cpfCnpj)
+            throws UsernameNotFoundException {
+        return loadUserByCpfCnpj(cpfCnpj);
+    }
+
+    public UserDetails loadUserByCpfCnpj(String cpfCnpj)
             throws UsernameNotFoundException {
 
-        UsuarioEntity usuarioEntity = usuarioRepository.findByEmail(email)
+        return toUserDetails(usuarioRepository.findByCpfCnpj(cpfCnpj)
                 .orElseThrow(() ->
-                        new UsernameNotFoundException("Usuário não encontrado"));
+                        new UsernameNotFoundException("Usuário não encontrado")));
+    }
 
-        return new User(
-                usuarioEntity.getEmail(),
-                usuarioEntity.getSenha(),
-                List.of(new SimpleGrantedAuthority("ROLE_" + usuarioEntity.getRole().name()))
-        );
+    private UserDetails toUserDetails(UsuarioEntity usuarioEntity) {
+
+        boolean clienteAtivo = clienteAtivoPolicy.podeAutenticar(
+                usuarioEntity.getCpfCnpj(),
+                RoleEnum.CLIENTE.equals(usuarioEntity.getRole()));
+
+        return User.withUsername(usuarioEntity.getEmail())
+                .password(usuarioEntity.getSenha())
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_" + usuarioEntity.getRole().name())))
+                .disabled(!clienteAtivo)
+                .build();
     }
 }

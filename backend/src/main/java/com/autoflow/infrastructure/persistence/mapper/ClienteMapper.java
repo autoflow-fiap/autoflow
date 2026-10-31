@@ -21,6 +21,7 @@ public interface ClienteMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "usuario", ignore = true)
     @Mapping(target = "veiculos", ignore = true)
+    @Mapping(target = "status", ignore = true)
     void updateEntity(ClienteInput request, @MappingTarget ClienteEntity entity);
 
     ClienteOutput mapToOutput(ClienteEntity clienteEntity);

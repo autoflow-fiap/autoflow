@@ -32,6 +32,7 @@ public class CadastrarUsuarioUseCaseImpl implements CadastrarUsuarioUseCase {
         usuario.setNome(request.nome());
         usuario.setEmail(request.email());
         usuario.setSenha(passwordGateway.encode(request.senha()));
+        usuario.setCpfCnpj(request.cpfCnpj());
         usuario.setRole(request.role());
         usuario = usuarioGateway.save(usuario);
 
@@ -43,6 +44,7 @@ public class CadastrarUsuarioUseCaseImpl implements CadastrarUsuarioUseCase {
                 usuario.getId(),
                 usuario.getNome(),
                 usuario.getEmail(),
+                usuario.getCpfCnpj(),
                 usuario.getRole()
         );
     }

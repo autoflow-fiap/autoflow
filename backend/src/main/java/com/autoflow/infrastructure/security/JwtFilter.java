@@ -1,5 +1,6 @@
 package com.autoflow.infrastructure.security;
 
+import com.autoflow.application.policy.ClienteAtivoPolicy;
 import com.autoflow.infrastructure.security.service.CustomUserDetailsService;
 import com.autoflow.infrastructure.security.service.JwtService;
 import jakarta.servlet.FilterChain;
@@ -10,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -22,6 +24,7 @@ public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final CustomUserDetailsService userDetailsService;
+    private final ClienteAtivoPolicy clienteAtivoPolicy;
 
     @Override
     public void doFilterInternal(
@@ -41,11 +44,24 @@ public class JwtFilter extends OncePerRequestFilter {
 
         if (SecurityContextHolder.getContext().getAuthentication() == null
                 && jwtService.tokenValido(token)) {
-            String email = jwtService.extrairEmail(token);
+            String cpfCnpj = jwtService.extrairCpfCnpj(token);
 
-            if (email != null) {
-                UserDetails userDetails =
-                        userDetailsService.loadUserByUsername(email);
+            if (cpfCnpj != null) {
+                UserDetails userDetails;
+                try {
+                    userDetails = userDetailsService.loadUserByCpfCnpj(cpfCnpj);
+                } catch (UsernameNotFoundException exception) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
+                boolean usuarioCliente = userDetails.getAuthorities().stream()
+                        .anyMatch(authority -> "ROLE_CLIENTE".equals(authority.getAuthority()));
+                if (!clienteAtivoPolicy.podeAutenticar(cpfCnpj, usuarioCliente)
+                        || !userDetails.isEnabled()) {
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN);
+                    return;
+                }
 
                 UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(

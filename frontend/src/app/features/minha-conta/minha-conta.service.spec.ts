@@ -33,6 +33,7 @@ describe('MinhaContaService', () => {
       cpfCnpj: '123.456.789-00',
       telefone: '11999999999',
       email: 'cliente@teste.com',
+      status: 'ATIVO',
       veiculos: [],
     };
 

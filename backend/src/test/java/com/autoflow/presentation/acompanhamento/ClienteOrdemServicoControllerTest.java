@@ -3,6 +3,7 @@ package com.autoflow.presentation.acompanhamento;
 
 import com.autoflow.application.output.ordemservico.acompanhamento.AcompanhamentoOrdemServicoOutput;
 import com.autoflow.application.port.in.ordemservico.acompanhamento.AcompanharOrdemServicoUseCase;
+import com.autoflow.application.policy.ClienteAtivoPolicy;
 import com.autoflow.domain.ordemservico.StatusOrdemServico;
 import com.autoflow.infrastructure.security.service.CustomUserDetailsService;
 import com.autoflow.infrastructure.security.service.JwtService;
@@ -56,6 +57,9 @@ class ClienteOrdemServicoControllerTest {
 
     @MockitoBean
     private CustomUserDetailsService userDetailsService;
+
+    @MockitoBean
+    private ClienteAtivoPolicy clienteAtivoPolicy;
 
     @Test
     @WithMockUser(username = "cliente@autoflow.com", roles = "CLIENTE")

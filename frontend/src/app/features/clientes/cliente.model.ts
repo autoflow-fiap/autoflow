@@ -7,6 +7,8 @@ export interface ClienteRequest {
   email: string;
 }
 
+export type ClienteStatus = 'ATIVO' | 'INATIVO';
+
 export interface VeiculoCliente {
   id: number;
   marca: string;
@@ -21,6 +23,7 @@ export interface ClienteResponse {
   cpfCnpj: string;
   telefone: string;
   email: string;
+  status: ClienteStatus;
   veiculos: VeiculoCliente[];
 }
 

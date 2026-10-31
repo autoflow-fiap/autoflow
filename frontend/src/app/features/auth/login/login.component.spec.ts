@@ -37,11 +37,11 @@ describe('LoginComponent', () => {
     mockAuth.login.and.returnValue(of(void 0));
     mockAuth.getRole.and.returnValue('CLIENTE');
     const component = criarComponente();
-    component.form.setValue({ email: 'cliente@teste.com', senha: '123456' });
+    component.form.setValue({ cpfCnpj: '529.982.247-25', senha: '123456' });
 
     component.submit();
 
-    expect(mockAuth.login).toHaveBeenCalledWith('cliente@teste.com', '123456');
+    expect(mockAuth.login).toHaveBeenCalledWith('529.982.247-25', '123456');
     expect(mockRouter.navigate).toHaveBeenCalledWith(['/minha-conta/minhas-ordens']);
   });
 
@@ -49,7 +49,7 @@ describe('LoginComponent', () => {
     mockAuth.login.and.returnValue(of(void 0));
     mockAuth.getRole.and.returnValue(null);
     const component = criarComponente();
-    component.form.setValue({ email: 'admin@teste.com', senha: '123456' });
+    component.form.setValue({ cpfCnpj: '529.982.247-25', senha: '123456' });
 
     component.submit();
 
@@ -59,12 +59,13 @@ describe('LoginComponent', () => {
   it('submit deve exibir mensagem de erro quando login falha', () => {
     mockAuth.login.and.returnValue(throwError(() => ({ status: 401 })));
     const component = criarComponente();
-    component.form.setValue({ email: 'cliente@teste.com', senha: 'errada' });
+    component.form.setValue({ cpfCnpj: '529.982.247-25', senha: 'errada' });
 
     component.submit();
 
-    expect(component.errorMsg()).toBe('E-mail ou senha inválidos. Verifique suas credenciais.');
+    expect(component.errorMsg()).toBe('CPF/CNPJ ou senha inválidos. Verifique suas credenciais.');
     expect(component.loading()).toBeFalse();
     expect(mockRouter.navigate).not.toHaveBeenCalled();
   });
+
 });

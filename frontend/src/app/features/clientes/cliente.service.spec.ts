@@ -13,7 +13,7 @@ describe('ClienteService', () => {
 
   const cliente: ClienteResponse = {
     id: 1, nome: 'Cliente Teste', cpfCnpj: '123.456.789-00', telefone: '11999999999',
-    email: 'cliente@teste.com', veiculos: [],
+    email: 'cliente@teste.com', status: 'ATIVO', veiculos: [],
   };
 
   beforeEach(() => {
@@ -83,6 +83,15 @@ describe('ClienteService', () => {
     expect(req.request.method).toBe('PATCH');
     expect(req.request.body).toEqual(body);
     req.flush(cliente);
+  });
+
+  it('alterarStatus deve chamar PATCH em /clientes/{id}/status com o status', () => {
+    service.alterarStatus(1, 'INATIVO').subscribe();
+
+    const req = httpTesting.expectOne(`${BASE}/1/status`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({ status: 'INATIVO' });
+    req.flush({ ...cliente, status: 'INATIVO' });
   });
 
   it('deletar deve chamar DELETE em /clientes/{id} esperando resposta texto', () => {

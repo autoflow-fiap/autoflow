@@ -40,7 +40,7 @@ class JwtServiceTest {
 
         String token =
                 jwtService.gerarToken(
-                        "admin@email.com",
+                        "52998224725",
                         "ROLE_ADMIN"
                 );
 
@@ -49,20 +49,20 @@ class JwtServiceTest {
     }
 
     @Test
-    void deveExtrairEmailDoToken() {
+        void deveExtrairCpfCnpjDoToken() {
 
         String token =
                 jwtService.gerarToken(
-                        "admin@email.com",
+                        "52998224725",
                         "ROLE_ADMIN"
                 );
 
-        String email =
-                jwtService.extrairEmail(token);
+        String cpfCnpj =
+                jwtService.extrairCpfCnpj(token);
 
         assertEquals(
-                "admin@email.com",
-                email
+                "52998224725",
+                cpfCnpj
         );
     }
 
@@ -71,7 +71,7 @@ class JwtServiceTest {
 
         String token =
                 jwtService.gerarToken(
-                        "admin@email.com",
+                        "52998224725",
                         "ROLE_ADMIN"
                 );
 
@@ -89,7 +89,7 @@ class JwtServiceTest {
 
         String token =
                 jwtService.gerarToken(
-                        "admin@email.com",
+                        "52998224725",
                         "ROLE_ADMIN"
                 );
 
@@ -109,17 +109,26 @@ class JwtServiceTest {
     }
 
     @Test
-    void deveGerarTokenComEmailCorreto() {
+    void deveRetornarFalseQuandoTokenEstiverExpirado() {
+        ReflectionTestUtils.setField(jwtService, "expiration", -1L);
+
+        String token = jwtService.gerarToken("52998224725", "CLIENTE");
+
+        assertFalse(jwtService.tokenValido(token));
+    }
+
+    @Test
+        void deveGerarTokenComCpfCnpjCorreto() {
 
         String token =
                 jwtService.gerarToken(
-                        "usuario@email.com",
+                        "12345678901",
                         "ROLE_CLIENTE"
                 );
 
         assertEquals(
-                "usuario@email.com",
-                jwtService.extrairEmail(token)
+                "12345678901",
+                jwtService.extrairCpfCnpj(token)
         );
     }
 
@@ -128,7 +137,7 @@ class JwtServiceTest {
 
         String token =
                 jwtService.gerarToken(
-                        "usuario@email.com",
+                        "12345678901",
                         "ROLE_CLIENTE"
                 );
 

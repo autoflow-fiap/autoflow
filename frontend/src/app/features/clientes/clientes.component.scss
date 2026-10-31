@@ -39,8 +39,16 @@
 }
 
 .col-acoes {
-  width: 120px;
+  width: 168px;
   white-space: nowrap;
+}
+
+.status-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+
+  &.status-ATIVO { background: #e8f5e9; color: #2e7d32; }
+  &.status-INATIVO { background: #ffebee; color: #c62828; }
 }
 
 .cliente-row {

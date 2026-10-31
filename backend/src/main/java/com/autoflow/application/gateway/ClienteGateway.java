@@ -2,6 +2,7 @@ package com.autoflow.application.gateway;
 
 import com.autoflow.application.input.cliente.ClienteInput;
 import com.autoflow.application.output.cliente.ClienteOutput;
+import com.autoflow.domain.cliente.ClienteStatus;
 
 import java.util.List;
 import java.util.Optional;
@@ -13,6 +14,8 @@ public interface ClienteGateway {
 
     ClienteOutput update(Long id, ClienteInput input);
 
+    ClienteOutput updateStatus(Long id, ClienteStatus status);
+
     Optional<ClienteOutput> findById(Long id);
 
 
@@ -23,6 +26,8 @@ public interface ClienteGateway {
     boolean existsByCpfCnpjAndIdNot(String cpfCnpj, Long id);
 
     Optional<ClienteOutput> findByUsuarioEmail(String usuarioEmail);
+
+    Optional<ClienteOutput> findByUsuarioCpfCnpj(String usuarioCpfCnpj);
 
 
     List<ClienteOutput> findAll();

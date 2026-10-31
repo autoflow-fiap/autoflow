@@ -16,8 +16,8 @@ spec:
     spec:
       containers:
         - name: autoflow-frontend-container
-          image: brunosousa06/autoflow-frontend:latest
-          imagePullPolicy: Always 
+          image: autoflow-frontend:latest
+          imagePullPolicy: Never
           resources:
             requests:
               memory: "512Mi"
@@ -27,12 +27,6 @@ spec:
               cpu: "500m"
           ports:
             - containerPort: 8080
-          env:
-            - name: BACKEND_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: autoflow-config
-                  key: BACKEND_URL
           readinessProbe:
             httpGet:
               path: /

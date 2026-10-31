@@ -1,25 +1,31 @@
+locals {
+  base_config = yamldecode(templatefile("${path.module}/../k8s/configmap.yaml", {
+    rds_address = data.terraform_remote_state.database.outputs.postgres_endpoint
+  }))
+  gateway_config = {
+    CORS_ALLOWED_ORIGINS     = join(",", sort(distinct(concat([var.gateway_public_origin], tolist(var.gateway_cors_origins)))))
+    APP_PUBLIC_BASE_URL      = "${var.gateway_public_origin}/api"
+    FRONTEND_PUBLIC_BASE_URL = var.gateway_public_origin
+    DEPLOYMENT_ENVIRONMENT   = var.deployment_environment
+    NEW_RELIC_LABELS         = "environment:${var.deployment_environment}"
+    SPRING_APPLICATION_NAME  = "autoflow-backend"
+  }
+}
+
 resource "kubectl_manifest" "autoflow_config" {
-  yaml_body = templatefile("${path.module}/../k8s/configmap.yaml", {
-    rds_address = aws_db_instance.autoflow_rds.address
-  })
+  yaml_body = yamlencode(merge(local.base_config, {
+    data = merge(local.base_config.data, local.gateway_config)
+  }))
 
-  depends_on = [aws_eks_cluster.autoflow, aws_db_instance.autoflow_rds, kubectl_manifest.backend_service
-  ]
+  depends_on = [kubectl_manifest.backend_service]
 }
 
-resource "kubectl_manifest" "autoflow_secrets" {
-  yaml_body = templatefile("${path.module}/../k8s/secret.yaml", {
-    db_password = var.database_password
-    db_username = var.database_username
-  })
-}
+# O pipeline já gerencia esse Secret com scripts/apply_k8s_secret.py e valores
+# protegidos. Remover apenas a gestão duplicada do state sem apagar o Secret.
+removed {
+  from = kubectl_manifest.autoflow_secrets
 
-
-resource "kubectl_manifest" "frontend_config" {
-  yaml_body = templatefile("${path.module}/../k8s/frontend-configmap.yaml", {
-    backend_service_address = data.kubernetes_service_v1.backend_lb.status[0].load_balancer[0].ingress[0].hostname
-  })
-
-  depends_on = [time_sleep.wait_seconds, kubectl_manifest.backend_service,
-  ]
+  lifecycle {
+    destroy = false
+  }
 }

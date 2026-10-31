@@ -2,6 +2,7 @@ package com.autoflow.infrastructure.persistence.adapters;
 
 import com.autoflow.application.input.cliente.ClienteInput;
 import com.autoflow.application.output.cliente.ClienteOutput;
+import com.autoflow.domain.cliente.ClienteStatus;
 import com.autoflow.infrastructure.persistence.entity.cliente.ClienteEntity;
 import com.autoflow.infrastructure.persistence.entity.usuario.UsuarioEntity;
 import com.autoflow.infrastructure.persistence.mapper.ClienteMapper;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,7 +35,7 @@ class ClienteRepositoryAdapterTest {
         ClienteRepositoryAdapter adapter = adapter();
         ClienteInput input = new ClienteInput("Bruno", "12345678901", "11999999999", "bruno@email.com");
         ClienteEntity entity = new ClienteEntity();
-        ClienteOutput output = ClienteOutput.builder().id(1L).nome("Bruno").build();
+        ClienteOutput output = ClienteOutput.builder().id(1L).nome("Bruno").status(ClienteStatus.ATIVO).build();
 
         when(clienteMapper.mapToEntity(input)).thenReturn(entity);
         when(clienteRepository.save(entity)).thenReturn(entity);
@@ -50,7 +52,7 @@ class ClienteRepositoryAdapterTest {
         ClienteEntity entity = new ClienteEntity();
         UsuarioEntity usuario = new UsuarioEntity();
         usuario.setId(7L);
-        ClienteOutput output = ClienteOutput.builder().id(1L).nome("Bruno").build();
+        ClienteOutput output = ClienteOutput.builder().id(1L).nome("Bruno").status(ClienteStatus.ATIVO).build();
 
         when(clienteMapper.mapToEntity(input)).thenReturn(entity);
         when(usuarioRepository.findById(7L)).thenReturn(Optional.of(usuario));
@@ -68,7 +70,7 @@ class ClienteRepositoryAdapterTest {
         ClienteEntity entity = new ClienteEntity();
         UsuarioEntity usuario = new UsuarioEntity();
         entity.setUsuario(usuario);
-        ClienteOutput output = ClienteOutput.builder().id(1L).nome("Novo Nome").build();
+        ClienteOutput output = ClienteOutput.builder().id(1L).nome("Novo Nome").status(ClienteStatus.ATIVO).build();
 
         when(clienteRepository.findById(1L)).thenReturn(Optional.of(entity));
         when(clienteRepository.save(entity)).thenReturn(entity);
@@ -84,7 +86,7 @@ class ClienteRepositoryAdapterTest {
         ClienteRepositoryAdapter adapter = adapter();
         ClienteInput input = new ClienteInput("Novo Nome", "12345678901", "11999999999", "novo@email.com");
         ClienteEntity entity = new ClienteEntity();
-        ClienteOutput output = ClienteOutput.builder().id(1L).nome("Novo Nome").build();
+        ClienteOutput output = ClienteOutput.builder().id(1L).nome("Novo Nome").status(ClienteStatus.ATIVO).build();
 
         when(clienteRepository.findById(1L)).thenReturn(Optional.of(entity));
         when(clienteRepository.save(entity)).thenReturn(entity);
@@ -95,10 +97,28 @@ class ClienteRepositoryAdapterTest {
     }
 
     @Test
+    void deveAtualizarSomenteStatusPreservandoRelacionamentos() {
+        ClienteRepositoryAdapter adapter = adapter();
+        ClienteEntity entity = new ClienteEntity();
+        var veiculos = List.of(new com.autoflow.infrastructure.persistence.entity.veiculo.VeiculoEntity());
+        entity.setVeiculos(veiculos);
+        ClienteOutput output = ClienteOutput.builder().id(1L).status(ClienteStatus.INATIVO).build();
+
+        when(clienteRepository.findById(1L)).thenReturn(Optional.of(entity));
+        when(clienteRepository.save(entity)).thenReturn(entity);
+        when(clienteMapper.mapToOutput(entity)).thenReturn(output);
+
+        assertEquals(output, adapter.updateStatus(1L, ClienteStatus.INATIVO));
+        assertEquals(ClienteStatus.INATIVO, entity.getStatus());
+        assertSame(veiculos, entity.getVeiculos());
+        verify(clienteMapper, never()).updateEntity(any(), any());
+    }
+
+    @Test
     void deveDelegarConsultasEExclusao() {
         ClienteRepositoryAdapter adapter = adapter();
         ClienteEntity entity = new ClienteEntity();
-        ClienteOutput output = ClienteOutput.builder().id(1L).build();
+        ClienteOutput output = ClienteOutput.builder().id(1L).status(ClienteStatus.ATIVO).build();
 
         when(clienteRepository.findById(1L)).thenReturn(Optional.of(entity));
         when(clienteRepository.findByCpfCnpj("12345678901")).thenReturn(Optional.of(entity));

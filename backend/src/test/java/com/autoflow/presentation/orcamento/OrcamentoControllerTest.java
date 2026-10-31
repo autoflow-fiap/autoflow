@@ -2,6 +2,7 @@ package com.autoflow.presentation.orcamento;
 
 import com.autoflow.application.gateway.OrcamentoDocumentoGateway;
 import com.autoflow.application.input.orcamento.OrcamentoFiltro;
+import com.autoflow.application.policy.ClienteAtivoPolicy;
 import com.autoflow.application.port.in.orcamento.ConsultarOrcamentoAutenticadoUseCase;
 import com.autoflow.application.port.in.orcamento.ConsultarOrcamentosUseCase;
 import com.autoflow.application.port.in.orcamento.DecidirOrcamentoUseCase;
@@ -76,6 +77,9 @@ class OrcamentoControllerTest {
 
     @MockitoBean
     private CustomUserDetailsService userDetailsService;
+
+    @MockitoBean
+    private ClienteAtivoPolicy clienteAtivoPolicy;
 
     @Test
     @WithMockUser(username = "admin@autoflow.com", roles = "ADMIN")

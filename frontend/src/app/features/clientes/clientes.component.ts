@@ -17,6 +17,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ClienteService } from './cliente.service';
 import {
   ClienteResponse,
+  ClienteStatus,
   formatarCpfCnpj,
   formatarTelefone,
 } from './cliente.model';
@@ -61,7 +62,7 @@ export class ClientesComponent implements OnInit {
 
   filtroDocumento = '';
 
-  readonly colunas = ['expandir', 'nome', 'cpfCnpj', 'telefone', 'email', 'acoes'];
+  readonly colunas = ['expandir', 'nome', 'cpfCnpj', 'telefone', 'email', 'status', 'acoes'];
   readonly fmt = formatarCpfCnpj;
   readonly fmtTel = formatarTelefone;
 
@@ -118,6 +119,49 @@ export class ClientesComponent implements OnInit {
   limparFiltros(): void {
     this.filtroDocumento = '';
     this.carregar();
+  }
+
+  labelStatus(status: ClienteStatus): string {
+    return status === 'ATIVO' ? 'Ativo' : 'Inativo';
+  }
+
+  confirmarAlteracaoStatus(cliente: ClienteResponse): void {
+    const ativar = cliente.status === 'INATIVO';
+    const ref = this.dialog.open<
+      ConfirmacaoDialogComponent,
+      ConfirmacaoDialogData,
+      boolean
+    >(ConfirmacaoDialogComponent, {
+      width: '400px',
+      data: {
+        titulo: ativar ? 'Ativar cliente' : 'Desativar cliente',
+        mensagem: ativar
+          ? `Tem certeza que deseja ativar "${cliente.nome}"?`
+          : `Tem certeza que deseja desativar "${cliente.nome}"?`,
+        labelConfirmar: ativar ? 'Ativar' : 'Desativar',
+      },
+    });
+
+    ref.afterClosed().subscribe((confirmado) => {
+      if (!confirmado) return;
+
+      const status: ClienteStatus = ativar ? 'ATIVO' : 'INATIVO';
+      this.clienteService.alterarStatus(cliente.id, status).subscribe({
+        next: (atualizado) => {
+          this.clientes.update(clientes => clientes.map(item =>
+            item.id === atualizado.id ? atualizado : item));
+          this.snackBar.open(
+            ativar ? 'Cliente ativado com sucesso.' : 'Cliente desativado com sucesso.',
+            'Fechar',
+            { duration: 3000 },
+          );
+        },
+        error: (err) => {
+          const msg = err?.error?.erro ?? 'Erro ao alterar o status do cliente.';
+          this.snackBar.open(msg, 'Fechar', { duration: 4000 });
+        },
+      });
+    });
   }
 
   toggleExpand(cliente: ClienteResponse, event: Event): void {

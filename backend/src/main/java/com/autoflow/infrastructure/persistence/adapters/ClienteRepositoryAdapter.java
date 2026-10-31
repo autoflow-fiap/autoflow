@@ -4,6 +4,7 @@ import com.autoflow.application.exception.ClienteNaoEncontradoException;
 import com.autoflow.application.gateway.ClienteGateway;
 import com.autoflow.application.input.cliente.ClienteInput;
 import com.autoflow.application.output.cliente.ClienteOutput;
+import com.autoflow.domain.cliente.ClienteStatus;
 import com.autoflow.infrastructure.persistence.entity.cliente.ClienteEntity;
 import com.autoflow.infrastructure.persistence.entity.usuario.UsuarioEntity;
 import com.autoflow.infrastructure.persistence.mapper.ClienteMapper;
@@ -46,6 +47,15 @@ public class ClienteRepositoryAdapter implements ClienteGateway {
     }
 
     @Override
+    @Transactional
+    public ClienteOutput updateStatus(Long id, ClienteStatus status) {
+        ClienteEntity cliente = clienteRepository.findById(id)
+                .orElseThrow(() -> new ClienteNaoEncontradoException("Cliente não encontrado com o ID: " + id));
+        cliente.setStatus(status);
+        return clienteMapper.mapToOutput(clienteRepository.save(cliente));
+    }
+
+    @Override
     public Optional<ClienteOutput> findById(Long id) {
         return clienteRepository.findById(id).map(clienteMapper::mapToOutput);
     }
@@ -66,8 +76,15 @@ public class ClienteRepositoryAdapter implements ClienteGateway {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Optional<ClienteOutput> findByUsuarioEmail(String usuarioEmail) {
         return clienteRepository.findByUsuarioEmail(usuarioEmail).map(clienteMapper::mapToOutput);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ClienteOutput> findByUsuarioCpfCnpj(String usuarioCpfCnpj) {
+        return clienteRepository.findByUsuarioCpfCnpj(usuarioCpfCnpj).map(clienteMapper::mapToOutput);
     }
 
     @Override

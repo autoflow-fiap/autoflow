@@ -23,7 +23,7 @@ public class NotificarOrcamentoReparoAdicionalService {
             gateway.notificar(new OrcamentoNotificacao(orcamento.getId(), orcamento.getTipo(), orcamento.getNumeroOs(),
                     cliente.getNome(), cliente.getEmail(), publicacao.urlPdf(), publicacao.urlDecisao()));
         } catch (Exception exception) {
-            log.error("Falha ao notificar cliente sobre orçamento complementar. orcamentoId={}", orcamento.getId(), exception);
+            log.error("Falha ao notificar cliente sobre orçamento complementar", exception);
         }
     }
 }

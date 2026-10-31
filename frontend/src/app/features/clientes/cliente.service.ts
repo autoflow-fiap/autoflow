@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ClienteRequest, ClienteResponse } from './cliente.model';
+import { ClienteRequest, ClienteResponse, ClienteStatus } from './cliente.model';
 
 @Injectable({ providedIn: 'root' })
 export class ClienteService {
@@ -31,6 +31,10 @@ export class ClienteService {
 
   atualizar(id: number, req: ClienteRequest): Observable<ClienteResponse> {
     return this.http.patch<ClienteResponse>(`${this.base}/${id}/atualizacao`, req);
+  }
+
+  alterarStatus(id: number, status: ClienteStatus): Observable<ClienteResponse> {
+    return this.http.patch<ClienteResponse>(`${this.base}/${id}/status`, { status });
   }
 
   // Backend retorna plain text, não JSON

@@ -50,6 +50,9 @@ class ConsultarOrcamentosUseCaseTest {
 
     private Usuario usuario(String email, RoleEnum role) {
         Usuario usuario = new Usuario();
-        usuario.setEmail(email); usuario.setRole(role); return usuario;
+        usuario.setEmail(email);
+        usuario.setCpfCnpj("12345678901");
+        usuario.setRole(role);
+        return usuario;
     }
 }
