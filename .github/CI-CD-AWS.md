@@ -14,15 +14,19 @@ ordem operacional do deploy.
 O workflow `.github/workflows/ci.yml` executa automaticamente em Pull Requests para `develop`/`main` e pushes para
 `develop`, `main` e `feature/*`: testes, builds, análises de segurança e validação Terraform local. Também constrói imagens
 Docker localmente, sem publicação. A CI não usa credenciais AWS, não executa Plan remoto e não aplica recursos.
-O workflow `.github/workflows/pipeline.yml` aceita `workflow_dispatch`; seus jobs executáveis são limitados a `develop`
-e `main` protegida. Pushes e Pull Requests não iniciam Plan, publicação, Apply ou rollout. Uma execução manual em outra
-branch não alcança os jobs do CD. Smoke tests manuais são exclusivos de `develop`.
+O workflow `.github/workflows/pipeline.yml` preserva `workflow_dispatch` e também recebe `push` em `develop`/`main`.
+No caminho automático, um gate consulta `AUTO_CD_ENABLED` no Environment correspondente e aguarda a CI `ci.yml` do mesmo
+repositório, branch e SHA. Somente a conclusão `success` da execução exata libera os jobs do CD; falha, cancelamento,
+`skipped`, divergência ou timeout bloqueia o Plan. O checkout do CD usa e confirma o SHA validado. PRs e branches
+`feature/**` não iniciam CD. Uma execução manual em outra branch não alcança os jobs do CD. Smoke tests manuais são
+exclusivos de `develop`.
 
 O workflow existente `pr-automatico.yaml` abre um Pull Request para `develop` após push em qualquer branch diferente
 de `develop`. O evento de Pull Request executa somente CI; publicação, Plan e Apply não são disparados por push ou PR.
 
 No CD, os jobs de teste/build e Terraform estático precedem o Plan. A publicação Docker ocorre somente quando o dispatch
-define `apply=true` e passa pela aprovação do Environment selecionado; um Plan-only (`apply=false`) não publica imagens.
+define `apply=true` e passa pela aprovação do Environment selecionado; o caminho automático e um Plan-only (`apply=false`)
+não publicam imagens. O Environment configurado também protege os Plans automáticos, que não autorizam Apply.
 O scan Snyk existente é preservado com seu comportamento não bloqueante. O Plan e o Apply vinculam branch, Environment,
 conta esperada, região, bucket e keys do ambiente; o Apply reutiliza o artifact criptografado da mesma execução e
 confirma seus hashes, metadados e commit. A opção `allow_destructive` tem default `false` e só é considerada em
@@ -34,7 +38,8 @@ Configure os GitHub Environments `homolog` e `production` com deployment restrit
 `main`, e com Required reviewers efetivos. O workflow exige `github.ref_protected` nos jobs production; configure
 externamente a proteção/ruleset de `main` e checks CI. Defina `TERRAFORM_APPLY_APPROVAL_CONFIGURED=true` em cada Environment
 somente depois de confirmar a regra no GitHub. A flag é um guard adicional; não substitui a proteção do Environment.
-O workflow também confirma a identidade dos reviewers configurados antes do Apply.
+O Apply continua exigindo `apply=true`, aprovação independente do Environment e o marcador. A aprovação de Plan, inclusive
+de um Plan automático, não autoriza Apply.
 
 ## Conta, região, States e seleção de recursos
 
@@ -80,6 +85,11 @@ keys, credenciais de banco/JWT e configuração New Relic coerentes dentro do me
 Repository Secrets. `DOCKERHUB_USERNAME` é Repository Variable compartilhada. `AUTOFLOW_TEST_CPF_CNPJ` e
 `AUTOFLOW_TEST_PASSWORD`, quando usados, pertencem somente a homologação e devem ser dados sintéticos.
 
+Para habilitar CD automático, configure a nova Environment Variable `AUTO_CD_ENABLED` com o valor literal `true` no
+Environment `homolog` e/ou `production`. Cada Environment é independente; variável ausente ou diferente de `true`
+mantém o respectivo ambiente desabilitado. A variável não contém segredo e não substitui `TERRAFORM_APPLY_APPROVAL_CONFIGURED`,
+`apply=true` nem Required reviewers. Nenhuma configuração do GitHub é criada ou alterada por esta documentação.
+
 ## New Relic
 
 O APM Java, os logs JSON correlacionados e a configuração Kubernetes existentes permanecem associados à aplicação.
@@ -104,8 +114,9 @@ Para uma implantação inicial, prepare e aprove as dependências nesta ordem, s
    Flyway existentes durante a inicialização; aguarde readiness e rollout antes da validação funcional.
 6. New Relic Kubernetes e recursos de observabilidade conforme configuração do repositório `autoflow-infra`.
 
-Depois de provisionadas e validadas as dependências, inicie manualmente o CD na branch do ambiente correspondente. Os
-workflows não coordenam dependências cross-repository automaticamente.
+Depois de provisionadas e validadas as dependências, habilite `AUTO_CD_ENABLED` no Environment desejado somente quando
+as configurações externas e proteções estiverem prontas; caso contrário, mantenha a variável ausente. Os workflows não
+coordenam dependências cross-repository automaticamente.
 
 ## Kubernetes e pendências de provisionamento
 

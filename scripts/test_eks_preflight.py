@@ -89,7 +89,8 @@ class PreflightTests(unittest.TestCase):
         self.assertIn(selected_environment, plan)
         self.assertIn(selected_environment, apply)
         self.assertIn("github.event_name == 'workflow_dispatch'", plan)
-        self.assertNotIn("github.event_name == 'push'", plan)
+        self.assertIn("github.event_name == 'push'", plan)
+        self.assertIn("needs.gate.outputs.auto_cd_enabled == 'true'", plan)
         self.assertIn("EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow-${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}.json", plan)
         self.assertIn("eks_endpoint_access.py authorize", plan)
         for orphaned_resource in (
@@ -129,7 +130,7 @@ class PreflightTests(unittest.TestCase):
         self.assertIn("kubectl rollout status deployment/autoflow-backend", apply)
         self.assertNotIn("smoke_api_gateway.py", apply)
         smoke = content.split("  smoke-tests:", 1)[1]
-        self.assertIn("needs: deploy-apply", smoke)
+        self.assertIn("needs: [gate, deploy-apply]", smoke)
         self.assertIn("runs-on: ubuntu-latest", smoke)
         self.assertIn("smoke_api_gateway.py", smoke)
         self.assertIn("inputs.smoke_tests_only", smoke)
@@ -137,8 +138,8 @@ class PreflightTests(unittest.TestCase):
         self.assertIn("eks_endpoint_access.py cleanup", apply)
         self.assertIn("kubectl rollout status deployment/autoflow-frontend", apply)
         self.assertNotIn("deployment-blocked-private-eks:", content)
-        self.assertIn("ref: ${{ github.sha }}", plan)
-        self.assertIn("ref: ${{ github.sha }}", apply)
+        self.assertIn("ref: ${{ needs.gate.outputs.sha }}", plan)
+        self.assertIn("ref: ${{ needs.gate.outputs.sha }}", apply)
         self.assertIn("terraform_plan_metadata.py", plan)
         self.assertIn("terraform_plan_metadata.py", apply)
 
@@ -170,7 +171,7 @@ class PreflightTests(unittest.TestCase):
         self.assertIn("refs/heads/develop", publish)
         self.assertIn("refs/heads/main", publish)
         self.assertIn("environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}", publish)
-        self.assertIn("needs: [backend-build, frontend-build, terraform-static]", publish)
+        self.assertIn("needs: [gate, backend-build, frontend-build, terraform-static]", publish)
         self.assertNotIn("snyk-scan", publish)
         self.assertIn("${{ github.sha }}", publish)
         self.assertIn("username: ${{ vars.DOCKERHUB_USERNAME }}", publish)
@@ -190,7 +191,7 @@ class PreflightTests(unittest.TestCase):
         smoke = content.split("  smoke-tests:", 1)[1]
 
         self.assertIn("branches: [develop, main, 'feature/**']", ci)
-        self.assertNotIn("github.event_name == 'push'", content.split("permissions:", 1)[0])
+        self.assertIn("  push:\n    branches: [develop, main]", content.split("permissions:", 1)[0])
         self.assertNotIn("github.event_name == 'pull_request'", content.split("permissions:", 1)[0])
         self.assertIn("needs: [backend-build, frontend-build, terraform-static]", docker_build)
         self.assertIn("docker build --file backend/Dockerfile", docker_build)
