@@ -60,8 +60,13 @@ Prefira nomes que expressem comportamento, por exemplo `metodo_quandoCondicao_de
 
 ## Qualidade e segurança
 
-A pipeline executa SonarQube para o backend e Snyk em pushes para `develop`. O Sonar depende do secret `SONAR_TOKEN`; o
-Snyk depende de `SNYK_TOKEN`.
+A análise SonarCloud do backend é executada em pushes para `develop` e em Pull Requests do mesmo repositório destinados a
+`develop`. O workflow `pipeline.yml`, acionado por push ou dispatch, também analisa somente `develop`. Essa é a branch principal atualmente
+configurada no projeto SonarCloud; outras branches, destinos de PR e PRs de forks pulam apenas a análise, com aviso
+explícito.
+O `mvn -B verify`, os testes, a cobertura e o Quality Gate (`sonar.qualitygate.wait=true`) permanecem ativos nas análises
+executadas. O SonarCloud depende do secret `SONAR_TOKEN`; o Snyk depende de `SNYK_TOKEN` e mantém os scans configurados no
+workflow CI.
 
 Consulte:
 
