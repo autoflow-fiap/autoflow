@@ -87,12 +87,26 @@ jobs:
       - name: Build and test backend, including Flyway integration
         working-directory: backend
         run: mvn -B verify
-      - name: SonarQube analysis
-        if: ${{ needs.gate.result == 'success' }}
+      - name: SonarCloud analysis
+        if: >-
+          ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+              github.ref == 'refs/heads/develop' }}
         working-directory: backend
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=BrunoSousa06_autoflow -Dsonar.qualitygate.wait=true -Dsonar.sources=src/main/java -Dsonar.tests=src/test/java
+      - name: Explain skipped SonarCloud analysis
+        if: >-
+          ${{ !((github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+                github.ref == 'refs/heads/develop') }}
+        shell: bash
+        run: |
+          echo "::notice title=SonarCloud analysis skipped::This event/branch is not supported; only the configured SonarCloud main branch (develop) is analyzed. Backend verification, tests, and coverage remain enabled."
+          {
+            echo "### SonarCloud analysis skipped"
+            echo "- Only the configured SonarCloud main branch (develop) is analyzed; this event/branch is unsupported."
+            echo "- Backend verification, tests, and coverage remain enabled."
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -294,6 +308,8 @@ jobs:
       artifact_name: ${{ steps.package.outputs.artifact_name }}
     env:
       GITHUB_DEPLOYMENT_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
+      AUTO_CD_ENABLED: ${{ needs.gate.outputs.auto_cd_enabled }}
+      BRANCH_PROTECTED: ${{ github.ref_protected }}
       DEPLOY_SHA: ${{ needs.gate.outputs.sha }}
       PLAN_ARTIFACT_NAME: autoflow-terraform-plan-${{ github.run_id }}-${{ github.run_attempt }}
       ALLOW_DESTRUCTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false' }}
@@ -310,6 +326,7 @@ jobs:
       TF_VAR_aws_allowed_account_ids: '["${{ vars.AWS_EXPECTED_ACCOUNT_ID }}"]'
       TF_VAR_region_default: ${{ vars.AWS_REGION }}
       TF_VAR_enable_newrelic_apm: ${{ vars.ENABLE_NEWRELIC_APM }}
+      TF_VAR_enable_http_request_logging: ${{ github.ref == 'refs/heads/main' && 'false' || vars.ENABLE_HTTP_REQUEST_LOGGING || 'false' }}
       TF_VAR_deployment_environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
       ENABLE_NEWRELIC_APM: ${{ vars.ENABLE_NEWRELIC_APM }}
       NEW_RELIC_LICENSE_SECRET_ID: ${{ vars.NEW_RELIC_LICENSE_SECRET_ID }}
@@ -367,6 +384,8 @@ jobs:
         env:
           AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}
         run: python scripts/verify_aws_account.py
+      - name: Verificar proprietário e acesso ao bucket S3 antes do lease
+        run: aws s3api head-bucket --bucket "$EKS_LEASE_BUCKET" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID"
       - name: Descobrir cluster EKS e endpoint do API Gateway do ambiente
         run: python scripts/pipeline_resource_discovery.py discover
       - name: Validar configuração New Relic do environment
@@ -403,7 +422,6 @@ jobs:
         working-directory: infra
         run: |
           set -euo pipefail
-          aws s3api head-bucket --bucket "$TF_STATE_BUCKET" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID"
           aws s3api head-object --bucket "$TF_STATE_BUCKET" --key "$AWS_RDS_STATE_KEY" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID" >/dev/null
           terraform init -input=false -reconfigure \
             -lockfile=readonly \
@@ -475,6 +493,8 @@ jobs:
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
     env:
       GITHUB_DEPLOYMENT_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
+      AUTO_CD_ENABLED: ${{ needs.gate.outputs.auto_cd_enabled }}
+      BRANCH_PROTECTED: ${{ github.ref_protected }}
       DEPLOY_SHA: ${{ needs.gate.outputs.sha }}
       PLAN_ARTIFACT_NAME: ${{ needs.deploy-plan.outputs.artifact_name }}
       EXPECTED_PLAN_SHA256: ${{ needs.deploy-plan.outputs.plan_sha256 }}
@@ -494,6 +514,7 @@ jobs:
       TF_VAR_aws_allowed_account_ids: '["${{ vars.AWS_EXPECTED_ACCOUNT_ID }}"]'
       TF_VAR_region_default: ${{ vars.AWS_REGION }}
       TF_VAR_enable_newrelic_apm: ${{ vars.ENABLE_NEWRELIC_APM }}
+      TF_VAR_enable_http_request_logging: ${{ github.ref == 'refs/heads/main' && 'false' || vars.ENABLE_HTTP_REQUEST_LOGGING || 'false' }}
       TF_VAR_deployment_environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
       ENABLE_NEWRELIC_APM: ${{ vars.ENABLE_NEWRELIC_APM }}
       NEW_RELIC_LICENSE_SECRET_ID: ${{ vars.NEW_RELIC_LICENSE_SECRET_ID }}
@@ -553,6 +574,8 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/verify_aws_account.py
+      - name: Verificar proprietário e acesso ao bucket S3 antes do lease
+        run: aws s3api head-bucket --bucket "$EKS_LEASE_BUCKET" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID"
       - name: Descobrir cluster EKS e endpoint do API Gateway do ambiente
         run: python scripts/pipeline_resource_discovery.py discover
       - name: Validar configuração New Relic do environment
@@ -586,7 +609,6 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
-          aws s3api head-bucket --bucket "$TF_STATE_BUCKET" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID"
           aws s3api head-object --bucket "$TF_STATE_BUCKET" --key "$AWS_RDS_STATE_KEY" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID" >/dev/null
           terraform init -input=false -reconfigure -lockfile=readonly \
             -backend-config="bucket=$TF_STATE_BUCKET" \
