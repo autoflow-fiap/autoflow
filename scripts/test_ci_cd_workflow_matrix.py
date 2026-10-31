@@ -118,11 +118,15 @@ class CiCdWorkflowMatrixTests(unittest.TestCase):
     def test_optional_smoke_credentials_do_not_fall_back_to_repository_secrets_in_production(self):
         content = (WORKFLOWS / "pipeline.yml").read_text(encoding="utf-8")
         smoke = section(content, "smoke-tests")
+        configuration_check = smoke.split("id: environment-config", 1)[1].split("- uses: aws-actions/configure-aws-credentials@v4", 1)[0]
 
         self.assertIn("AUTOFLOW_TEST_CPF_CNPJ", smoke)
         self.assertIn("AUTOFLOW_TEST_PASSWORD", smoke)
         self.assertIn("steps.environment-config.outputs.environment_test_credentials == 'true'", smoke)
         self.assertIn("env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog'", smoke)
+        self.assertIn("HAS_TEST_CPF_CNPJ", configuration_check)
+        self.assertIn("HAS_TEST_PASSWORD", configuration_check)
+        self.assertIn("precisam ser configurados juntos", configuration_check)
 
 
 if __name__ == "__main__":

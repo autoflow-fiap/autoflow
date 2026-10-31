@@ -96,7 +96,8 @@ globais removíveis após esta alteração está em [variables-and-secrets.md](.
 estão no Repository e não nos Environments. Para preservar os testes autenticados existentes em `homolog`, o job mantém
 fallback temporário a esses dois Repository Secrets somente nesse ambiente; `production` nunca usa o fallback global.
 Cadastre o par em cada Environment onde o login autenticado for desejado e, depois de validar homologação, remova a
-compatibilidade e as cópias globais. Use dados sintéticos e separados por ambiente.
+compatibilidade e as cópias globais. Se somente um Secret do par estiver no Environment, o job falha fechado antes de
+configurar credenciais AWS. Use dados sintéticos e separados por ambiente.
 
 Para habilitar CD automático, configure a nova Environment Variable `AUTO_CD_ENABLED` com o valor literal `true` no
 Environment `homolog` e/ou `production`. Cada Environment é independente; variável ausente ou diferente de `true`

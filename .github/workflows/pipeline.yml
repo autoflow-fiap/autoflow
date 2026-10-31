@@ -682,10 +682,21 @@ jobs:
           for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
             grep -Fxq -- "$name" <<< "$SECRET_NAMES" || { echo "O Secret $name precisa estar cadastrado no GitHub Environment selecionado." >&2; exit 1; }
           done
-          if grep -Fxq -- AUTOFLOW_TEST_CPF_CNPJ <<< "$SECRET_NAMES" && grep -Fxq -- AUTOFLOW_TEST_PASSWORD <<< "$SECRET_NAMES"; then
+          HAS_TEST_CPF_CNPJ=false
+          HAS_TEST_PASSWORD=false
+          if grep -Fxq -- AUTOFLOW_TEST_CPF_CNPJ <<< "$SECRET_NAMES"; then
+            HAS_TEST_CPF_CNPJ=true
+          fi
+          if grep -Fxq -- AUTOFLOW_TEST_PASSWORD <<< "$SECRET_NAMES"; then
+            HAS_TEST_PASSWORD=true
+          fi
+          if [[ "$HAS_TEST_CPF_CNPJ" == true && "$HAS_TEST_PASSWORD" == true ]]; then
             echo "environment_test_credentials=true" >> "$GITHUB_OUTPUT"
-          else
+          elif [[ "$HAS_TEST_CPF_CNPJ" == false && "$HAS_TEST_PASSWORD" == false ]]; then
             echo "environment_test_credentials=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Os Secrets AUTOFLOW_TEST_CPF_CNPJ e AUTOFLOW_TEST_PASSWORD precisam ser configurados juntos no Environment." >&2
+            exit 1
           fi
           test -n "$API_GATEWAY_CORS_ORIGINS"
           test -n "$AWS_REGION"
@@ -711,11 +722,8 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$API_GATEWAY_ORIGIN" || { echo "API_GATEWAY_ORIGIN não está configurada" >&2; exit 1; }
-          test -n "$AWS_REGION" || { echo "AWS_REGION não está configurada" >&2; exit 1; }
-          test -n "$AWS_EXPECTED_ACCOUNT_ID" || { echo "AWS_EXPECTED_ACCOUNT_ID não está configurada" >&2; exit 1; }
-          python -c 'import json, os; v=json.loads(os.environ["API_GATEWAY_CORS_ORIGINS"]); assert isinstance(v, list) and all(isinstance(x, str) and x.strip() for x in v), "API_GATEWAY_CORS_ORIGINS deve ser um array JSON de origens não vazias"'
       - name: Executar smoke tests
         env:
-          AUTOFLOW_TEST_CPF_CNPJ: ${{ (env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' || steps.environment-config.outputs.environment_test_credentials == 'true') && secrets.AUTOFLOW_TEST_CPF_CNPJ || '' }}
-          AUTOFLOW_TEST_PASSWORD: ${{ (env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' || steps.environment-config.outputs.environment_test_credentials == 'true') && secrets.AUTOFLOW_TEST_PASSWORD || '' }}
+          AUTOFLOW_TEST_CPF_CNPJ: ${{ (steps.environment-config.outputs.environment_test_credentials == 'true' && secrets.AUTOFLOW_TEST_CPF_CNPJ) || (steps.environment-config.outputs.environment_test_credentials == 'false' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_TEST_CPF_CNPJ) || '' }}
+          AUTOFLOW_TEST_PASSWORD: ${{ (steps.environment-config.outputs.environment_test_credentials == 'true' && secrets.AUTOFLOW_TEST_PASSWORD) || (steps.environment-config.outputs.environment_test_credentials == 'false' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_TEST_PASSWORD) || '' }}
         run: python scripts/smoke_api_gateway.py "$API_GATEWAY_ORIGIN" --region "$AWS_REGION" --account "$AWS_EXPECTED_ACCOUNT_ID" --cors-origins "$API_GATEWAY_CORS_ORIGINS"
