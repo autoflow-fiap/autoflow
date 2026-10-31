@@ -157,32 +157,15 @@ def fetch_ci_runs(repository: str, branch: str, sha: str) -> Sequence[Mapping[st
     return [run for run in runs if isinstance(run, Mapping)]
 
 
-def environment_auto_cd_enabled(variables: Sequence[Mapping[str, object]]) -> bool:
-    """Habilita somente pelo valor literal true da Variable do Environment."""
-    matching = [item for item in variables if item.get("name") == "AUTO_CD_ENABLED"]
-    if len(matching) > 1:
-        raise TriggerError("A Variable AUTO_CD_ENABLED está duplicada no Environment.")
-    return len(matching) == 1 and matching[0].get("value") == "true"
-
-
-def fetch_environment_auto_cd(repository: str, environment: str) -> bool:
-    """Lê apenas a configuração de habilitação do Environment selecionado."""
-    endpoint = f"repos/{repository}/environments/{environment}/variables/AUTO_CD_ENABLED"
-    try:
-        result = subprocess.run(
-            ["gh", "api", "--jq", ".value", endpoint],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-        )
-    except OSError as error:
-        raise TriggerError("Não foi possível consultar a Variable AUTO_CD_ENABLED do Environment.") from error
-    except subprocess.CalledProcessError as error:
-        if "404" in (error.stderr or ""):
-            return False
-        raise TriggerError("Não foi possível consultar a Variable AUTO_CD_ENABLED do Environment.") from error
-    return result.stdout.strip() == "true"
+def auto_cd_enabled_for_environment(environment: str, variables: Mapping[str, str]) -> bool:
+    """Habilita o CD somente pelo valor literal true injetado para o Environment."""
+    variable_name = {
+        "homolog": "AUTO_CD_ENABLED_HOMOLOG",
+        "production": "AUTO_CD_ENABLED_PRODUCTION",
+    }.get(environment)
+    if variable_name is None:
+        raise TriggerError("Não há configuração de CD automático para o Environment selecionado.")
+    return variables.get(variable_name) == "true"
 
 
 def main() -> int:
@@ -201,7 +184,9 @@ def main() -> int:
             github_ref_protected=os.environ.get("GITHUB_REF_PROTECTED", "false"),
         )
         if os.environ["GITHUB_EVENT_NAME"] == "push":
-            outputs["auto_cd_enabled"] = str(fetch_environment_auto_cd(repository, outputs["environment"])).lower()
+            outputs["auto_cd_enabled"] = str(
+                auto_cd_enabled_for_environment(outputs["environment"], os.environ)
+            ).lower()
             if outputs["auto_cd_enabled"] == "true":
                 wait_for_ci(
                     lambda: fetch_ci_runs(repository, outputs["branch"], outputs["sha"]),

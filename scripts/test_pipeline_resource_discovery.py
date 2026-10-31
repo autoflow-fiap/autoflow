@@ -149,8 +149,9 @@ class PipelineResourceDiscoveryTests(unittest.TestCase):
             ("  deploy-apply:", "\n  smoke-tests:"),
         ):
             job = WORKFLOW.split(job_name, 1)[1].split(following_job, 1)[0]
-            self.assertIn("environments/$GITHUB_DEPLOYMENT_ENVIRONMENT/variables", job)
-            self.assertIn("AWS_TF_STATE_KEY AWS_RDS_STATE_KEY", job)
+            self.assertNotIn("/environments/", job)
+            self.assertIn("AWS_TF_STATE_KEY: ${{ vars.AWS_TF_STATE_KEY }}", job)
+            self.assertIn("AWS_RDS_STATE_KEY: ${{ vars.AWS_RDS_STATE_KEY }}", job)
 
     def test_push_never_authorizes_destructive_terraform_operations(self):
         destructive_setting = "ALLOW_DESTRUCTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false' }}"

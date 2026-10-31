@@ -44,12 +44,14 @@ class CiCdWorkflowMatrixTests(unittest.TestCase):
         self.assertIn("  push:\n    branches: [develop, main]", triggers)
         self.assertNotIn("  pull_request:", triggers)
         self.assertIn("python scripts/validate_cd_trigger.py", gate)
+        self.assertIn("AUTO_CD_ENABLED_HOMOLOG: ${{ vars.AUTO_CD_ENABLED_HOMOLOG }}", gate)
+        self.assertIn("AUTO_CD_ENABLED_PRODUCTION: ${{ vars.AUTO_CD_ENABLED_PRODUCTION }}", gate)
         self.assertNotIn("configure-aws-credentials", gate)
         self.assertNotIn("terraform plan", gate)
         self.assertIn("inputs.apply == true", publish)
         self.assertIn("github.event_name == 'workflow_dispatch'", publish)
         self.assertIn("TERRAFORM_APPLY_APPROVAL_CONFIGURED", publish)
-        self.assertIn("required_reviewers", publish)
+        self.assertIn('test "$APPROVAL_CONFIGURED" = true', publish)
         self.assertIn("environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}", publish)
         self.assertIn("inputs.apply != true && needs.docker-publish.result == 'skipped'", plan)
         self.assertIn("inputs.apply == true && github.event_name == 'workflow_dispatch' && needs.docker-publish.result == 'success'", plan)
@@ -60,11 +62,70 @@ class CiCdWorkflowMatrixTests(unittest.TestCase):
         self.assertIn("github.event_name == 'workflow_dispatch'", apply)
         self.assertIn("inputs.apply == true", apply)
         self.assertIn("needs: [gate, deploy-plan]", apply)
-        self.assertIn("required_reviewers", apply)
         self.assertIn("TERRAFORM_APPLY_APPROVAL_CONFIGURED", apply)
+        self.assertIn("environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}", plan)
+        self.assertIn("environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}", apply)
         self.assertIn("github.ref_protected", apply)
         self.assertNotIn("github.event_name == 'push'", publish + apply)
         self.assertNotIn("feature/", publish + plan + apply)
+
+    def test_cd_validates_injected_environment_values_without_admin_api(self):
+        content = (WORKFLOWS / "pipeline.yml").read_text(encoding="utf-8")
+        publish = section(content, "docker-publish", "deploy-plan")
+        plan = section(content, "deploy-plan", "deploy-apply")
+        apply = section(content, "deploy-apply", "smoke-tests")
+        required_variables = (
+            "AWS_REGION",
+            "AWS_EXPECTED_ACCOUNT_ID",
+            "AWS_TERRAFORM_STATE_BUCKET",
+            "AWS_TF_STATE_KEY",
+            "AWS_RDS_STATE_KEY",
+        )
+        required_secrets = (
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_SESSION_TOKEN",
+            "TF_PLAN_ENCRYPTION_KEY",
+        )
+
+        for job in (publish, plan, apply):
+            with self.subTest(job="publish" if job == publish else "plan" if job == plan else "apply"):
+                self.assertNotIn("gh api", job)
+                self.assertNotIn("/environments/", job)
+                self.assertNotIn("REVIEWERS=", job)
+                self.assertNotIn("GH_TOKEN", job)
+                self.assertIn("environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}", job)
+
+        publish_config = publish.split("Exigir configuração de Apply antes da publicação", 1)[1].split("\n      - ", 1)[0]
+        self.assertIn("DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}", publish_config)
+        self.assertIn("DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}", publish_config)
+        self.assertIn('test -n "$DOCKERHUB_PASSWORD"', publish_config)
+        self.assertNotRegex(publish_config, r"(?m)^\s*(?:echo|printf)\b[^\n]*\$DOCKERHUB_PASSWORD\b")
+
+        for job in (plan, apply):
+            with self.subTest(job="plan" if job == plan else "apply"):
+                step = job.split("Validar valores injetados pelo GitHub Environment", 1)[1].split("\n      - ", 1)[0]
+                self.assertIn('[[ -n "${!name}" ]] ||', step)
+                for name in required_variables:
+                    self.assertIn(f"{name}: ${{{{ vars.{name} }}}}", step)
+                for name in required_secrets:
+                    self.assertIn(f"{name}: ${{{{ secrets.{name} }}}}", step)
+                    self.assertNotRegex(step, rf"(?m)^\s*(?:echo|printf)\b[^\n]*\${name}\b")
+
+        apply_config = apply.split("Validar valores injetados pelo GitHub Environment", 1)[1].split("\n      - ", 1)[0]
+        self.assertIn("TERRAFORM_APPLY_APPROVAL_CONFIGURED: ${{ vars.TERRAFORM_APPLY_APPROVAL_CONFIGURED }}", apply_config)
+        self.assertIn('test "$TERRAFORM_APPLY_APPROVAL_CONFIGURED" = true', apply_config)
+        self.assertIn('if [[ "$ENABLE_NEWRELIC_APM" == true ]]; then', apply_config)
+        self.assertIn("NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}", apply_config)
+        for secret in (
+            "AUTOFLOW_DB_USERNAME",
+            "AUTOFLOW_DB_PASSWORD",
+            "AUTOFLOW_JWT_SECRET",
+            "AUTOFLOW_MAIL_PASSWORD",
+            "AUTOFLOW_PUBLIC_TOKEN_SECRET",
+        ):
+            self.assertIn(f"{secret}: ${{{{ secrets.{secret} }}}}", apply_config)
+            self.assertNotRegex(apply_config, rf"(?m)^\s*(?:echo|printf)\b[^\n]*\${secret}\b")
 
     def test_encrypted_plan_and_external_state_guards_remain_in_cd(self):
         content = (WORKFLOWS / "pipeline.yml").read_text(encoding="utf-8")

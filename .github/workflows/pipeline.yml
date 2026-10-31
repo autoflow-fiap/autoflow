@@ -53,6 +53,8 @@ jobs:
           GITHUB_REF_PROTECTED: ${{ github.ref_protected }}
           CI_WORKFLOW_NAME: AutoFlow CI
           EXPECTED_REPOSITORY_ID: ${{ github.repository_id }}
+          AUTO_CD_ENABLED_HOMOLOG: ${{ vars.AUTO_CD_ENABLED_HOMOLOG }}
+          AUTO_CD_ENABLED_PRODUCTION: ${{ vars.AUTO_CD_ENABLED_PRODUCTION }}
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: python scripts/validate_cd_trigger.py
@@ -244,17 +246,17 @@ jobs:
         env:
           DEPLOY_SHA: ${{ needs.gate.outputs.sha }}
         run: test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
-      - name: Exigir configuração de Apply e Required Reviewers antes da publicação
+      - name: Exigir configuração de Apply antes da publicação
         env:
           APPROVAL_CONFIGURED: ${{ vars.TERRAFORM_APPLY_APPROVAL_CONFIGURED }}
-          GITHUB_DEPLOYMENT_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
-          GH_TOKEN: ${{ github.token }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
           test "$APPROVAL_CONFIGURED" = true || { echo "Publicação bloqueada: TERRAFORM_APPLY_APPROVAL_CONFIGURED deve ser true." >&2; exit 1; }
-          REVIEWERS=$(gh api "repos/$GITHUB_REPOSITORY/environments/$GITHUB_DEPLOYMENT_ENVIRONMENT" --jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length')
-          test "$REVIEWERS" -gt 0 || { echo "Publicação bloqueada: configure Required Reviewers no Environment $GITHUB_DEPLOYMENT_ENVIRONMENT." >&2; exit 1; }
+          test -n "$DOCKERHUB_USERNAME" || { echo "A Variable DOCKERHUB_USERNAME precisa ter valor no Environment selecionado." >&2; exit 1; }
+          test -n "$DOCKERHUB_PASSWORD" || { echo "O Secret DOCKERHUB_PASSWORD precisa ter valor no Environment selecionado." >&2; exit 1; }
       - uses: docker/login-action@v3
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
@@ -318,19 +320,25 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.gate.outputs.sha }}
-      - name: Exigir variáveis no GitHub Environment selecionado
+      - name: Validar valores injetados pelo GitHub Environment
         env:
-          GH_TOKEN: ${{ github.token }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}
+          AWS_TERRAFORM_STATE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
+          AWS_TF_STATE_KEY: ${{ vars.AWS_TF_STATE_KEY }}
+          AWS_RDS_STATE_KEY: ${{ vars.AWS_RDS_STATE_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          TF_PLAN_ENCRYPTION_KEY: ${{ secrets.TF_PLAN_ENCRYPTION_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          VARIABLE_NAMES=$(gh api --paginate "repos/$GITHUB_REPOSITORY/environments/$GITHUB_DEPLOYMENT_ENVIRONMENT/variables?per_page=30" --jq '.variables[].name')
           for name in AWS_REGION AWS_EXPECTED_ACCOUNT_ID AWS_TERRAFORM_STATE_BUCKET AWS_TF_STATE_KEY AWS_RDS_STATE_KEY; do
-            grep -Fxq -- "$name" <<< "$VARIABLE_NAMES" || { echo "A Variable $name precisa estar cadastrada no GitHub Environment selecionado." >&2; exit 1; }
+            [[ -n "${!name}" ]] || { echo "A Variable $name precisa ter valor no GitHub Environment selecionado." >&2; exit 1; }
           done
-          SECRET_NAMES=$(gh api --paginate "repos/$GITHUB_REPOSITORY/environments/$GITHUB_DEPLOYMENT_ENVIRONMENT/secrets?per_page=100" --jq '.secrets[].name')
-          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
-            grep -Fxq -- "$name" <<< "$SECRET_NAMES" || { echo "O Secret $name precisa estar cadastrado no GitHub Environment selecionado." >&2; exit 1; }
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN TF_PLAN_ENCRYPTION_KEY; do
+            [[ -n "${!name}" ]] || { echo "O Secret $name precisa ter valor no GitHub Environment selecionado." >&2; exit 1; }
           done
       - name: Validar branch, Environment e separação de Terraform States
         run: python scripts/pipeline_resource_discovery.py validate-config
@@ -498,20 +506,38 @@ jobs:
           ref: ${{ needs.gate.outputs.sha }}
       - name: Confirmar checkout do commit que gerou o Plan
         run: test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
-      - name: Exigir variáveis no GitHub Environment selecionado
+      - name: Validar valores injetados pelo GitHub Environment
         env:
-          GH_TOKEN: ${{ github.token }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}
+          AWS_TERRAFORM_STATE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}
+          AWS_TF_STATE_KEY: ${{ vars.AWS_TF_STATE_KEY }}
+          AWS_RDS_STATE_KEY: ${{ vars.AWS_RDS_STATE_KEY }}
+          TERRAFORM_APPLY_APPROVAL_CONFIGURED: ${{ vars.TERRAFORM_APPLY_APPROVAL_CONFIGURED }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AUTOFLOW_DB_USERNAME: ${{ secrets.AUTOFLOW_DB_USERNAME }}
+          AUTOFLOW_DB_PASSWORD: ${{ secrets.AUTOFLOW_DB_PASSWORD }}
+          AUTOFLOW_JWT_SECRET: ${{ secrets.AUTOFLOW_JWT_SECRET }}
+          AUTOFLOW_MAIL_PASSWORD: ${{ secrets.AUTOFLOW_MAIL_PASSWORD }}
+          AUTOFLOW_PUBLIC_TOKEN_SECRET: ${{ secrets.AUTOFLOW_PUBLIC_TOKEN_SECRET }}
+          TF_PLAN_ENCRYPTION_KEY: ${{ secrets.TF_PLAN_ENCRYPTION_KEY }}
+          ENABLE_NEWRELIC_APM: ${{ vars.ENABLE_NEWRELIC_APM }}
+          NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          VARIABLE_NAMES=$(gh api --paginate "repos/$GITHUB_REPOSITORY/environments/$GITHUB_DEPLOYMENT_ENVIRONMENT/variables?per_page=30" --jq '.variables[].name')
           for name in AWS_REGION AWS_EXPECTED_ACCOUNT_ID AWS_TERRAFORM_STATE_BUCKET AWS_TF_STATE_KEY AWS_RDS_STATE_KEY TERRAFORM_APPLY_APPROVAL_CONFIGURED; do
-            grep -Fxq -- "$name" <<< "$VARIABLE_NAMES" || { echo "A Variable $name precisa estar cadastrada no GitHub Environment selecionado." >&2; exit 1; }
+            [[ -n "${!name}" ]] || { echo "A Variable $name precisa ter valor no GitHub Environment selecionado." >&2; exit 1; }
           done
-          SECRET_NAMES=$(gh api --paginate "repos/$GITHUB_REPOSITORY/environments/$GITHUB_DEPLOYMENT_ENVIRONMENT/secrets?per_page=100" --jq '.secrets[].name')
-          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AUTOFLOW_DB_USERNAME AUTOFLOW_DB_PASSWORD AUTOFLOW_JWT_SECRET AUTOFLOW_MAIL_PASSWORD AUTOFLOW_PUBLIC_TOKEN_SECRET; do
-            grep -Fxq -- "$name" <<< "$SECRET_NAMES" || { echo "O Secret $name precisa estar cadastrado no GitHub Environment selecionado." >&2; exit 1; }
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AUTOFLOW_DB_USERNAME AUTOFLOW_DB_PASSWORD AUTOFLOW_JWT_SECRET AUTOFLOW_MAIL_PASSWORD AUTOFLOW_PUBLIC_TOKEN_SECRET TF_PLAN_ENCRYPTION_KEY; do
+            [[ -n "${!name}" ]] || { echo "O Secret $name precisa ter valor no GitHub Environment selecionado." >&2; exit 1; }
           done
+          test "$TERRAFORM_APPLY_APPROVAL_CONFIGURED" = true || { echo "Apply bloqueado: configure Required reviewers no Environment selecionado e TERRAFORM_APPLY_APPROVAL_CONFIGURED=true." >&2; exit 1; }
+          if [[ "$ENABLE_NEWRELIC_APM" == true ]]; then
+            test -n "$NEW_RELIC_LICENSE_KEY" || { echo "O Secret NEW_RELIC_LICENSE_KEY precisa ter valor quando ENABLE_NEWRELIC_APM=true." >&2; exit 1; }
+          fi
       - name: Validar branch, Environment e separação de Terraform States
         run: python scripts/pipeline_resource_discovery.py validate-config
       - name: Configurar credenciais temporárias AWS
@@ -524,13 +550,9 @@ jobs:
       - name: Verificar conta AWS e sinalizador de proteção
         env:
           AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           python scripts/verify_aws_account.py
-          test "${{ vars.TERRAFORM_APPLY_APPROVAL_CONFIGURED }}" = true
-          REVIEWERS=$(gh api "repos/$GITHUB_REPOSITORY/environments/$GITHUB_DEPLOYMENT_ENVIRONMENT" --jq '[.protection_rules[]? | select(.type == "required_reviewers") | .reviewers[]?] | length')
-          test "$REVIEWERS" -gt 0
       - name: Descobrir cluster EKS e endpoint do API Gateway do ambiente
         run: python scripts/pipeline_resource_discovery.py discover
       - name: Validar configuração New Relic do environment
