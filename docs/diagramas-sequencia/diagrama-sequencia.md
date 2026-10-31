@@ -5,16 +5,16 @@ adapters e PostgreSQL. Os diagramas complementam o Swagger e não substituem o c
 
 ## Índice
 
-| Fluxo                             | Arquivo                                                                                  | Escopo                                        |
-|-----------------------------------|------------------------------------------------------------------------------------------|-----------------------------------------------|
-| Abertura da OS                   | [fluxo_principal.mermaid](fluxo_principal.mermaid)                                       | JWT, API Gateway, VPC Link, ALB, backend e persistência |
-| Aprovação/recusa autenticada      | [aprovacao_recusa_orcamento.mermaid](aprovacao_recusa_orcamento.mermaid)                 | Decisão do cliente com JWT                    |
-| Aprovação/recusa pública          | [aprovacao_recusa_orcamento_publico.mermaid](aprovacao_recusa_orcamento_publico.mermaid) | Token, consulta e decisão sem login           |
-| Execução e reparo adicional       | [execucao_os_reparo_adicional.mermaid](execucao_os_reparo_adicional.mermaid)             | Estoque, execução e orçamento complementar    |
-| Início de serviço e estoque       | [inicio_servico_baixa_estoque.mermaid](inicio_servico_baixa_estoque.mermaid)             | Disponibilidade e baixa de itens              |
-| Registro de reparo adicional      | [registro_reparo_adicional.mermaid](registro_reparo_adicional.mermaid)                   | Criação, publicação e notificação             |
-| Decisão de orçamento complementar | [decisao_orcamento_complementar.mermaid](decisao_orcamento_complementar.mermaid)         | Aprovação/recusa do reparo vinculado          |
-| Conclusão da OS                   | [conclusao_servico_os.mermaid](conclusao_servico_os.mermaid)                             | Finalização de serviços e status              |
+| Fluxo                             | Arquivo                                                                                  | Escopo                                                    |
+|-----------------------------------|------------------------------------------------------------------------------------------|-----------------------------------------------------------|
+| Abertura da OS                    | [fluxo_principal.md](fluxo_principal.md)                                                | JWT, API Gateway, VPC Link, ALB, backend e persistência   |
+| Aprovação/recusa autenticada      | [aprovacao_recusa_orcamento.mermaid](aprovacao_recusa_orcamento.mermaid)                 | Decisão do cliente com JWT                                |
+| Aprovação/recusa pública          | [aprovacao_recusa_orcamento_publico.mermaid](aprovacao_recusa_orcamento_publico.mermaid) | Token, consulta e decisão sem login                       |
+| Execução e reparo adicional       | [execucao_os_reparo_adicional.mermaid](execucao_os_reparo_adicional.mermaid)             | Estoque, execução e orçamento complementar                |
+| Início de serviço e estoque       | [inicio_servico_baixa_estoque.mermaid](inicio_servico_baixa_estoque.mermaid)             | Disponibilidade e baixa de itens                          |
+| Registro de reparo adicional      | [registro_reparo_adicional.mermaid](registro_reparo_adicional.mermaid)                   | Criação, publicação e notificação                         |
+| Decisão de orçamento complementar | [decisao_orcamento_complementar.mermaid](decisao_orcamento_complementar.mermaid)         | Aprovação/recusa do reparo vinculado                    |
+| Conclusão da OS                   | [conclusao_servico_os.mermaid](conclusao_servico_os.mermaid)                             | Finalização de serviços e status                          |
 
 ## Como ler
 
