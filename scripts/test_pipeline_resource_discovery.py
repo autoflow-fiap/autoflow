@@ -82,19 +82,23 @@ class PipelineResourceDiscoveryTests(unittest.TestCase):
         with self.assertRaises(discovery.DiscoveryError):
             discovery.validate_state_configuration("homolog", "state-bucket", "homolog/app/../state", "homolog/rds.custom")
 
-    def test_pull_requests_and_feature_branches_cannot_select_deploy_environment(self):
+    def test_only_workflow_dispatch_on_the_mapped_branch_can_select_deploy_environment(self):
         for event, ref, environment in (
             ("pull_request", "refs/pull/12/merge", "homolog"),
             ("push", "refs/heads/feature/change", "homolog"),
+            ("push", "refs/heads/develop", "homolog"),
+            ("push", "refs/heads/main", "production"),
             ("workflow_dispatch", "refs/heads/feat/change", "production"),
-            ("push", "refs/heads/main", "homolog"),
+            ("workflow_dispatch", "refs/heads/main", "homolog"),
         ):
             with self.subTest(event=event, ref=ref, environment=environment), self.assertRaises(discovery.DiscoveryError):
                 discovery.validate_context(event, ref, environment)
 
-    def test_apply_is_limited_to_push_or_dispatch_on_develop_and_main(self):
+    def test_apply_is_limited_to_explicit_dispatch_on_develop_and_main(self):
         apply = WORKFLOW.split("  deploy-apply:", 1)[1].split("  smoke-tests:", 1)[0]
-        self.assertIn("github.event_name == 'push' || github.event_name == 'workflow_dispatch'", apply)
+        self.assertIn("github.event_name == 'workflow_dispatch'", apply)
+        self.assertIn("inputs.apply == true", apply)
+        self.assertNotIn("github.event_name == 'push'", apply)
         self.assertIn("github.ref == 'refs/heads/develop'", apply)
         self.assertIn("github.ref == 'refs/heads/main'", apply)
         self.assertNotIn("pull_request", apply)

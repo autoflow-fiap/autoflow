@@ -88,7 +88,8 @@ class PreflightTests(unittest.TestCase):
         selected_environment = "environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}"
         self.assertIn(selected_environment, plan)
         self.assertIn(selected_environment, apply)
-        self.assertIn("github.event_name == 'push'", plan)
+        self.assertIn("github.event_name == 'workflow_dispatch'", plan)
+        self.assertNotIn("github.event_name == 'push'", plan)
         self.assertIn("EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow-${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}.json", plan)
         self.assertIn("eks_endpoint_access.py authorize", plan)
         for orphaned_resource in (
@@ -111,7 +112,9 @@ class PreflightTests(unittest.TestCase):
         self.assertIn("runs-on: ubuntu-latest", apply)
         self.assertIn("GITHUB_DEPLOYMENT_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}", apply)
         self.assertIn("select(.type == \"required_reviewers\")", apply)
-        self.assertIn("github.event_name == 'push'", apply)
+        self.assertIn("github.event_name == 'workflow_dispatch'", apply)
+        self.assertIn("inputs.apply == true", apply)
+        self.assertNotIn("github.event_name == 'push'", apply)
         self.assertIn("actions/download-artifact@v4", apply)
         self.assertIn("sha256sum --check --status", apply)
         self.assertIn("cmp --silent", apply)
@@ -157,35 +160,38 @@ class PreflightTests(unittest.TestCase):
         self.assertIn('sha256sum --check --status', verify)
         self.assertIn('verify-fingerprint "$RUNNER_TEMP/autoflow-plan/newrelic-inputs.sha256"', verify)
 
-    def test_images_are_published_only_from_develop_push_with_commit_sha(self):
+    def test_images_are_published_only_from_authorized_dispatch_with_commit_sha(self):
         from pathlib import Path
         workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
         content = workflow.read_text(encoding="utf-8")
         publish = content.split("  docker-publish:", 1)[1].split("  deploy-plan:", 1)[0]
-        self.assertIn("github.event_name == 'push'", publish)
+        self.assertIn("github.event_name == 'workflow_dispatch'", publish)
+        self.assertIn("inputs.apply == true", publish)
         self.assertIn("refs/heads/develop", publish)
+        self.assertIn("refs/heads/main", publish)
+        self.assertIn("environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}", publish)
         self.assertIn("needs: [backend-build, frontend-build, terraform-static]", publish)
         self.assertNotIn("snyk-scan", publish)
-        self.assertNotIn("environment:", publish)
         self.assertIn("${{ github.sha }}", publish)
         self.assertIn("username: ${{ vars.DOCKERHUB_USERNAME }}", publish)
         self.assertIn("password: ${{ secrets.DOCKERHUB_PASSWORD }}", publish)
         self.assertNotIn("pull_request", publish)
         self.assertNotIn(":latest", content)
 
-    def test_feature_branches_run_validation_and_local_docker_build_only(self):
+    def test_feature_branches_run_automatic_ci_and_cannot_start_cd(self):
         from pathlib import Path
         workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
         content = workflow.read_text(encoding="utf-8")
-        docker_build = content.split("  docker-build:", 1)[1].split("  snyk-scan:", 1)[0]
+        ci = (Path(__file__).parents[1] / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        docker_build = ci.split("  docker-build:", 1)[1].split("  snyk-scan:", 1)[0]
         publish = content.split("  docker-publish:", 1)[1].split("  deploy-plan:", 1)[0]
         plan = content.split("  deploy-plan:", 1)[1].split("  deploy-apply:", 1)[0]
         apply = content.split("  deploy-apply:", 1)[1].split("  smoke-tests:", 1)[0]
         smoke = content.split("  smoke-tests:", 1)[1]
 
-        self.assertIn("branches: [develop, main, 'feature/**']", content)
-        self.assertIn("github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feature/')", docker_build)
-        self.assertIn("github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/feature/')", docker_build)
+        self.assertIn("branches: [develop, main, 'feature/**']", ci)
+        self.assertNotIn("github.event_name == 'push'", content.split("permissions:", 1)[0])
+        self.assertNotIn("github.event_name == 'pull_request'", content.split("permissions:", 1)[0])
         self.assertIn("needs: [backend-build, frontend-build, terraform-static]", docker_build)
         self.assertIn("docker build --file backend/Dockerfile", docker_build)
         self.assertIn("docker build --file frontend/Dockerfile", docker_build)
@@ -205,7 +211,8 @@ class PreflightTests(unittest.TestCase):
         from pathlib import Path
         workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
         content = workflow.read_text(encoding="utf-8")
-        static = content.split("  terraform-static:", 1)[1].split("  docker-build:", 1)[0]
+        ci = (Path(__file__).parents[1] / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        static = ci.split("  terraform-static:", 1)[1].split("  docker-build:", 1)[0]
         self.assertIn("terraform init -backend=false -input=false", static)
         self.assertIn("terraform validate", static)
         self.assertNotIn("AWS_ACCESS_KEY_ID", static)
@@ -215,7 +222,8 @@ class PreflightTests(unittest.TestCase):
         from pathlib import Path
         workflow = Path(__file__).parents[1] / ".github" / "workflows" / "pipeline.yml"
         content = workflow.read_text(encoding="utf-8")
-        snyk_job = content.split("  snyk-scan:", 1)[1].split("  docker-publish:", 1)[0]
+        ci = (Path(__file__).parents[1] / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        snyk_job = ci.split("  snyk-scan:", 1)[1]
         self.assertEqual(snyk_job.count("continue-on-error: true"), 2)
         self.assertIn("snyk-open-source.sarif", snyk_job)
         self.assertIn("snyk-container.sarif", snyk_job)

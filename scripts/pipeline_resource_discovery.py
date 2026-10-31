@@ -37,7 +37,7 @@ def required_environment(name: str) -> str:
 
 
 def validate_context(event_name: str, git_ref: str, deployment_environment: str) -> str:
-    if event_name not in {"push", "workflow_dispatch"}:
+    if event_name != "workflow_dispatch":
         raise DiscoveryError("Descoberta de recursos não é permitida para este evento.")
     if deployment_environment not in ENVIRONMENTS:
         raise DiscoveryError("GitHub Environment de deploy não reconhecido.")

@@ -207,13 +207,18 @@ Testes automatizados e análises de qualidade e segurança usam JUnit, SonarQube
 
 ## Fluxo do CI/CD
 
-O [workflow do GitHub Actions](.github/workflows/pipeline.yml) mantém CI em Pull Requests e branches de trabalho sem
-credenciais AWS ou Apply. Push em `develop` publica imagens imutáveis pelo SHA e implanta em `homolog`; push em `main`
-executa o mesmo fluxo em `production`. Em ambos, o Plan só segue após testes/build/validação Terraform e publicação
-Docker; Apply usa o artifact do mesmo commit e aguarda os gates efetivos do GitHub Environment. O push não autoriza
-destruições ou substituições: a opção destrutiva só pode ser solicitada em `workflow_dispatch`, após revisão e aprovação.
-O deploy inclui atualização do Secret Kubernetes, rollout de backend/frontend e, em homologação, smoke tests do API
-Gateway. Em produção, não são executados smoke tests com credenciais sintéticas de homologação.
+O workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) executa automaticamente CI em Pull Requests para
+`develop`/`main` e pushes para `develop`, `main` e `feature/**`: testes Java/Angular/Python, análise SonarQube/Snyk,
+build Docker sem publicação e validação Terraform estática. A CI não configura credenciais AWS nem executa Plan, Apply,
+publicação de imagens ou rollout.
+
+O workflow [.github/workflows/pipeline.yml](.github/workflows/pipeline.yml) é CD manual, disponível apenas em
+`workflow_dispatch` para `develop` → `homolog` ou `main` → `production`. Com `apply=false`, executa os pré-requisitos e
+Plan sem publicar imagens nem aplicar recursos. Com `apply=true`, publica as imagens imutáveis pelo SHA sob o Environment
+protegido, executa Plan e só então apresenta o job de Apply, que exige autorização e aprovação independentes no GitHub
+Environment. O Plan usa o artifact criptografado do mesmo commit; o Apply mantém os gates e os guards de destruição e
+substituição. O deploy inclui atualização do Secret Kubernetes, rollout de backend/frontend e, em homologação, smoke
+tests do API Gateway. Em produção, não são executados smoke tests com credenciais sintéticas de homologação.
 
 O provisionamento cross-repositório segue esta ordem: VPC/EKS, RDS, Lambda/autenticação, API Gateway e aplicação. A
 aplicação depende do API Gateway para configurar a origem pública; o backend executa as migrations Flyway existentes
@@ -227,11 +232,14 @@ pré-requisitos externos e as pendências que só podem ser confirmadas no clust
 
 ```mermaid
 flowchart TD
-  A[Push em develop/main] --> B[CI: testes, builds, segurança e Terraform estático]
-  B --> D[Publicação Docker Hub com tags SHA]
-  D --> P[Plan no Environment do branch]
-  P --> G{Gates efetivos do Environment}
-  G -->|Aprovado| T[Apply do plan e rollout]
-  G -->|Rejeitado| X[Deploy interrompido]
-  R[PR ou branch de trabalho] --> C[CI sem Apply ou acesso AWS]
+  A[Push ou PR para branches CI] --> B[CI: testes, builds, segurança e Terraform estático]
+  B --> C[Build Docker sem publicação]
+  D[Dispatch em develop ou main, apply=false] --> P[Plan no Environment selecionado]
+  P --> F[Artifact Terraform criptografado]
+  E[Dispatch em develop ou main, apply=true] --> U[Aprovação do Environment para publicar imagens]
+  U --> I[Publicação Docker Hub com tags SHA]
+  I --> Q[Plan no Environment selecionado]
+  Q --> G{Aprovação independente do Apply}
+  G -->|Aprovado e gate true| T[Apply do plan e rollout]
+  G -->|Rejeitado ou sem autorização| X[Apply bloqueado]
 ```
