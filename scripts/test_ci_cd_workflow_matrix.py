@@ -33,6 +33,55 @@ class CiCdWorkflowMatrixTests(unittest.TestCase):
         self.assertIn("backend-test-reports", ci)
         self.assertIn("frontend-coverage", ci)
 
+    def test_sonarcloud_only_analyzes_the_configured_main_branch_and_supported_prs(self):
+        ci = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+        pipeline = (WORKFLOWS / "pipeline.yml").read_text(encoding="utf-8")
+        backend = section(ci, "backend-build", "frontend-build")
+        ci_analysis = backend.split("- name: SonarCloud analysis", 1)[1].split(
+            "- name: Explain skipped SonarCloud analysis", 1
+        )[0]
+        ci_skip = backend.split("- name: Explain skipped SonarCloud analysis", 1)[1].split(
+            "- uses: actions/upload-artifact@v4", 1
+        )[0]
+        pipeline_backend = section(pipeline, "backend-build", "frontend-build")
+        pipeline_analysis = pipeline_backend.split("- name: SonarCloud analysis", 1)[1].split(
+            "- name: Explain skipped SonarCloud analysis", 1
+        )[0]
+        pipeline_skip = pipeline_backend.split("- name: Explain skipped SonarCloud analysis", 1)[1].split(
+            "- uses: actions/upload-artifact@v4", 1
+        )[0]
+
+        self.assertIn("name: Backend tests, build and SonarQube", backend)
+        self.assertIn("run: mvn -B verify", backend)
+        self.assertLess(backend.index("run: mvn -B verify"), backend.index("- name: SonarCloud analysis"))
+        self.assertIn("github.ref == 'refs/heads/develop'", ci_analysis)
+        self.assertIn("github.event.pull_request.base.ref == 'develop'", ci_analysis)
+        self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", ci_analysis)
+        self.assertNotIn("refs/heads/main", ci_analysis)
+        self.assertIn("sonar.qualitygate.wait=true", ci_analysis)
+        self.assertIn("SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}", ci_analysis)
+        self.assertIn("SonarCloud analysis skipped", ci_skip)
+        self.assertIn("PR target is not the SonarCloud main branch (develop)", ci_skip)
+        self.assertIn("fork pull requests do not receive SONAR_TOKEN", ci_skip)
+        self.assertIn("Maven verification, tests, coverage, and security scans remain enabled", ci_skip)
+
+        self.assertIn("run: mvn -B verify", pipeline_backend)
+        self.assertLess(
+            pipeline_backend.index("run: mvn -B verify"),
+            pipeline_backend.index("- name: SonarCloud analysis"),
+        )
+        self.assertIn("github.event_name == 'push'", pipeline_analysis)
+        self.assertIn("github.event_name == 'workflow_dispatch'", pipeline_analysis)
+        self.assertIn("github.ref == 'refs/heads/develop'", pipeline_analysis)
+        self.assertNotIn("refs/heads/main", pipeline_analysis)
+        self.assertIn("sonar.qualitygate.wait=true", pipeline_analysis)
+        self.assertIn("SonarCloud analysis skipped", pipeline_skip)
+        self.assertIn("only the configured SonarCloud main branch (develop) is analyzed", pipeline_skip)
+
+        snyk = section(ci, "snyk-scan")
+        self.assertEqual(snyk.count("continue-on-error: true"), 2)
+        self.assertIn("SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}", snyk)
+
     def test_opt_in_push_plan_and_manual_apply_only_publish_after_approval(self):
         content = (WORKFLOWS / "pipeline.yml").read_text(encoding="utf-8")
         triggers = content.split("permissions:", 1)[0]

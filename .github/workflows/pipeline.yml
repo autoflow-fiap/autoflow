@@ -87,12 +87,26 @@ jobs:
       - name: Build and test backend, including Flyway integration
         working-directory: backend
         run: mvn -B verify
-      - name: SonarQube analysis
-        if: ${{ needs.gate.result == 'success' }}
+      - name: SonarCloud analysis
+        if: >-
+          ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+              github.ref == 'refs/heads/develop' }}
         working-directory: backend
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=BrunoSousa06_autoflow -Dsonar.qualitygate.wait=true -Dsonar.sources=src/main/java -Dsonar.tests=src/test/java
+      - name: Explain skipped SonarCloud analysis
+        if: >-
+          ${{ !((github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+                github.ref == 'refs/heads/develop') }}
+        shell: bash
+        run: |
+          echo "::notice title=SonarCloud analysis skipped::This event/branch is not supported; only the configured SonarCloud main branch (develop) is analyzed. Backend verification, tests, and coverage remain enabled."
+          {
+            echo "### SonarCloud analysis skipped"
+            echo "- Only the configured SonarCloud main branch (develop) is analyzed; this event/branch is unsupported."
+            echo "- Backend verification, tests, and coverage remain enabled."
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

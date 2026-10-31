@@ -33,12 +33,45 @@ jobs:
       - name: Build and test backend, including Flyway integration
         working-directory: backend
         run: mvn -B verify
-      - name: SonarQube analysis
-        if: ${{ !startsWith(github.ref, 'refs/heads/feature/') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+      - name: SonarCloud analysis
+        if: >-
+          ${{ (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
+              (github.event_name == 'pull_request' &&
+               github.event.pull_request.base.ref == 'develop' &&
+               github.event.pull_request.head.repo.full_name == github.repository) }}
         working-directory: backend
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=BrunoSousa06_autoflow -Dsonar.qualitygate.wait=true -Dsonar.sources=src/main/java -Dsonar.tests=src/test/java
+      - name: Explain skipped SonarCloud analysis
+        if: >-
+          ${{ !((github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
+                (github.event_name == 'pull_request' &&
+                 github.event.pull_request.base.ref == 'develop' &&
+                 github.event.pull_request.head.repo.full_name == github.repository)) }}
+        env:
+          CI_EVENT_NAME: ${{ github.event_name }}
+          CI_REF: ${{ github.ref }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_SOURCE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          CI_REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          if [[ "$CI_EVENT_NAME" == pull_request && "$PR_SOURCE_REPOSITORY" != "$CI_REPOSITORY" ]]; then
+            REASON="fork pull requests do not receive SONAR_TOKEN"
+          elif [[ "$CI_EVENT_NAME" == pull_request && "$PR_BASE_REF" != develop ]]; then
+            REASON="the PR target is not the SonarCloud main branch (develop)"
+          elif [[ "$CI_EVENT_NAME" == push && "$CI_REF" != refs/heads/develop ]]; then
+            REASON="the push is not to the SonarCloud main branch (develop)"
+          else
+            REASON="this event is not supported for SonarCloud analysis"
+          fi
+          echo "::notice title=SonarCloud analysis skipped::$REASON. Maven verification, tests, coverage, and security scans remain enabled."
+          {
+            echo "### SonarCloud analysis skipped"
+            echo "- Reason: $REASON."
+            echo "- Maven verification, tests, coverage, and security scans remain enabled."
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
