@@ -6,27 +6,29 @@ ordem operacional do deploy.
 
 ## Branches, eventos e ambientes
 
-| Branch | GitHub Environment | Ação em `push` | Cluster EKS esperado |
+| Branch | GitHub Environment | Ação em `workflow_dispatch` | Cluster EKS esperado |
 |---|---|---|---|
-| `develop` | `homolog` | Publicar imagens, Plan, Apply aprovado, rollout e smoke tests | `eks-autoflow` |
-| `main` | `production` | Publicar imagens, Plan, Apply aprovado e rollout | `eks-autoflow-production` |
+| `develop` | `homolog` | `apply=false`: Plan; `apply=true`: publicar imagens, Plan, Apply aprovado e rollout com smoke tests | `eks-autoflow` |
+| `main` | `production` | `apply=false`: Plan; `apply=true`: publicar imagens, Plan, Apply aprovado e rollout | `eks-autoflow-production` |
 
-Pull Requests executam CI, testes, builds, análises de segurança e validação Terraform local, sem credenciais AWS,
-Plan remoto ou Apply. Pushes para `feature/*` também executam apenas CI e build local das imagens. O `workflow_dispatch`
-pode ser iniciado em qualquer ref, mas os jobs privilegiados validam evento, branch e GitHub Environment: somente
-`develop`/`homolog` e `main` protegida/`production` podem publicar imagens ou iniciar Plan/Apply. Dispatch em branch de trabalho
-permanece sem acesso a AWS e sem deploy. Smoke tests manuais são exclusivos de `develop`.
+O workflow `.github/workflows/ci.yml` executa automaticamente em Pull Requests para `develop`/`main` e pushes para
+`develop`, `main` e `feature/*`: testes, builds, análises de segurança e validação Terraform local. Também constrói imagens
+Docker localmente, sem publicação. A CI não usa credenciais AWS, não executa Plan remoto e não aplica recursos.
+O workflow `.github/workflows/pipeline.yml` aceita `workflow_dispatch`; seus jobs executáveis são limitados a `develop`
+e `main` protegida. Pushes e Pull Requests não iniciam Plan, publicação, Apply ou rollout. Uma execução manual em outra
+branch não alcança os jobs do CD. Smoke tests manuais são exclusivos de `develop`.
 
 O workflow existente `pr-automatico.yaml` abre um Pull Request para `develop` após push em qualquer branch diferente
-de `develop`. O push em `feat/production-dedicated` aciona essa automação; o evento de Pull Request executa somente CI,
-pois Publish, Plan e Apply aceitam apenas push/dispatch nas branches de ambiente.
+de `develop`. O evento de Pull Request executa somente CI; publicação, Plan e Apply não são disparados por push ou PR.
 
-Em `develop` e `main`, os jobs bloqueantes de testes/build e Terraform estático precedem a publicação Docker e o Plan.
+No CD, os jobs de teste/build e Terraform estático precedem o Plan. A publicação Docker ocorre somente quando o dispatch
+define `apply=true` e passa pela aprovação do Environment selecionado; um Plan-only (`apply=false`) não publica imagens.
 O scan Snyk existente é preservado com seu comportamento não bloqueante. O Plan e o Apply vinculam branch, Environment,
 conta esperada, região, bucket e keys do ambiente; o Apply reutiliza o artifact criptografado da mesma execução e
-confirma seus hashes, metadados e commit. O push não autoriza destruições
-ou substituições. A opção `allow_destructive` tem default `false` e só é considerada em `workflow_dispatch`, após
-revisão do Plan e aprovação dos Required reviewers do Environment. O Apply revalida o mesmo Plan antes de aplicá-lo.
+confirma seus hashes, metadados e commit. A opção `allow_destructive` tem default `false` e só é considerada em
+`workflow_dispatch`, após revisão do Plan e aprovação dos Required reviewers do Environment. O Apply também requer
+`apply=true`, passa por aprovação independente do Environment e confirma `TERRAFORM_APPLY_APPROVAL_CONFIGURED=true`.
+O Apply revalida o mesmo Plan antes de aplicá-lo.
 
 Configure os GitHub Environments `homolog` e `production` com deployment restrito, respectivamente, a `develop` e
 `main`, e com Required reviewers efetivos. O workflow exige `github.ref_protected` nos jobs production; configure
@@ -102,8 +104,8 @@ Para uma implantação inicial, prepare e aprove as dependências nesta ordem, s
    Flyway existentes durante a inicialização; aguarde readiness e rollout antes da validação funcional.
 6. New Relic Kubernetes e recursos de observabilidade conforme configuração do repositório `autoflow-infra`.
 
-Depois de provisionadas e validadas as dependências, cada push aprovado em `develop`/`main` executa o CD do ambiente
-correspondente. Os workflows não coordenam dependências cross-repository automaticamente.
+Depois de provisionadas e validadas as dependências, inicie manualmente o CD na branch do ambiente correspondente. Os
+workflows não coordenam dependências cross-repository automaticamente.
 
 ## Kubernetes e pendências de provisionamento
 
