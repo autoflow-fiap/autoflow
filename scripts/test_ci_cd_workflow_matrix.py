@@ -102,16 +102,22 @@ class CiCdWorkflowMatrixTests(unittest.TestCase):
         self.assertIn("autoflow-${GITHUB_DEPLOYMENT_ENVIRONMENT}", smoke)
         self.assertNotIn("autoflow-homolog", smoke)
 
-    def test_smoke_tests_require_environment_scoped_aws_credentials_before_use(self):
+    def test_smoke_tests_validate_injected_environment_values_without_admin_api(self):
         content = (WORKFLOWS / "pipeline.yml").read_text(encoding="utf-8")
         smoke = section(content, "smoke-tests")
         configuration_check = smoke.split("id: environment-config", 1)[1].split("- uses: aws-actions/configure-aws-credentials@v4", 1)[0]
 
-        self.assertIn("actions: read", smoke)
-        self.assertIn("environments/$GITHUB_DEPLOYMENT_ENVIRONMENT/variables", configuration_check)
-        self.assertIn("API_GATEWAY_CORS_ORIGINS AWS_REGION AWS_EXPECTED_ACCOUNT_ID", configuration_check)
-        self.assertIn("environments/$GITHUB_DEPLOYMENT_ENVIRONMENT/secrets", configuration_check)
-        self.assertIn("AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN", configuration_check)
+        self.assertNotIn("actions: read", smoke)
+        self.assertNotIn("GH_TOKEN", smoke)
+        self.assertNotIn("gh api", smoke)
+        self.assertNotIn("environments/$GITHUB_DEPLOYMENT_ENVIRONMENT", smoke)
+        self.assertIn("API_GATEWAY_CORS_ORIGINS: ${{ vars.API_GATEWAY_CORS_ORIGINS }}", smoke)
+        self.assertIn("AWS_REGION: ${{ vars.AWS_REGION }}", smoke)
+        self.assertIn("AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}", smoke)
+        for secret in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
+            self.assertIn(f"{secret}: ${{{{ secrets.{secret} }}}}", configuration_check)
+        self.assertIn('[[ -n "${!name}" ]]', configuration_check)
+        self.assertIn("API_GATEWAY_CORS_ORIGINS AWS_REGION AWS_EXPECTED_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN", configuration_check)
         self.assertLess(smoke.index("id: environment-config"), smoke.index("aws-actions/configure-aws-credentials@v4"))
         self.assertIn("python scripts/verify_aws_account.py", smoke)
 
@@ -120,13 +126,18 @@ class CiCdWorkflowMatrixTests(unittest.TestCase):
         smoke = section(content, "smoke-tests")
         configuration_check = smoke.split("id: environment-config", 1)[1].split("- uses: aws-actions/configure-aws-credentials@v4", 1)[0]
 
-        self.assertIn("AUTOFLOW_TEST_CPF_CNPJ", smoke)
-        self.assertIn("AUTOFLOW_TEST_PASSWORD", smoke)
-        self.assertIn("steps.environment-config.outputs.environment_test_credentials == 'true'", smoke)
-        self.assertIn("env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog'", smoke)
-        self.assertIn("HAS_TEST_CPF_CNPJ", configuration_check)
-        self.assertIn("HAS_TEST_PASSWORD", configuration_check)
-        self.assertIn("precisam ser configurados juntos", configuration_check)
+        self.assertIn("AUTOFLOW_HOMOLOG_TEST_CPF_CNPJ", configuration_check)
+        self.assertIn("AUTOFLOW_HOMOLOG_TEST_PASSWORD", configuration_check)
+        self.assertIn("AUTOFLOW_PRODUCTION_TEST_CPF_CNPJ", configuration_check)
+        self.assertIn("AUTOFLOW_PRODUCTION_TEST_PASSWORD", configuration_check)
+        self.assertIn("REPOSITORY_TEST_CPF_CNPJ: ${{ env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_TEST_CPF_CNPJ || '' }}", configuration_check)
+        self.assertIn("REPOSITORY_TEST_PASSWORD: ${{ env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_TEST_PASSWORD || '' }}", configuration_check)
+        self.assertIn("test_credentials_source=environment", configuration_check)
+        self.assertIn("test_credentials_source=repository", configuration_check)
+        self.assertIn("test_credentials_source=none", configuration_check)
+        self.assertIn("Os Secrets de teste do Environment selecionado precisam ser fornecidos juntos.", configuration_check)
+        self.assertIn("Credenciais globais de teste não podem ser usadas fora de homolog.", configuration_check)
+        self.assertIn("steps.environment-config.outputs.test_credentials_source == 'repository' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog'", smoke)
 
 
 if __name__ == "__main__":

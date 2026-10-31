@@ -92,12 +92,17 @@ CI/CD. `DOCKERHUB_PASSWORD` é Repository Secret e `DOCKERHUB_USERNAME` é Repos
 cadastrados nos Environments; o job protegido de publicação ainda depende desses valores globais. O inventário de cópias
 globais removíveis após esta alteração está em [variables-and-secrets.md](../docs/variables-and-secrets.md).
 
-`AUTOFLOW_TEST_CPF_CNPJ` e `AUTOFLOW_TEST_PASSWORD` são Secrets opcionais. Na configuração consultada em 30/10/2026,
-estão no Repository e não nos Environments. Para preservar os testes autenticados existentes em `homolog`, o job mantém
-fallback temporário a esses dois Repository Secrets somente nesse ambiente; `production` nunca usa o fallback global.
-Cadastre o par em cada Environment onde o login autenticado for desejado e, depois de validar homologação, remova a
-compatibilidade e as cópias globais. Se somente um Secret do par estiver no Environment, o job falha fechado antes de
-configurar credenciais AWS. Use dados sintéticos e separados por ambiente.
+`AUTOFLOW_TEST_CPF_CNPJ` e `AUTOFLOW_TEST_PASSWORD` são Secrets opcionais globais e permanecem como fallback temporário
+somente para `homolog`. Para migrar homologação sem misturar escopos, cadastre o par Environment-only
+`AUTOFLOW_HOMOLOG_TEST_CPF_CNPJ`/`AUTOFLOW_HOMOLOG_TEST_PASSWORD`; se ambos não existirem, o workflow usa o par global; se
+somente um existir, o job falha fechado antes de configurar AWS. Depois de validar homologação, remova o fallback e os
+Secrets globais.
+
+Em `production`, o workflow aceita somente o par Environment-only
+`AUTOFLOW_PRODUCTION_TEST_CPF_CNPJ`/`AUTOFLOW_PRODUCTION_TEST_PASSWORD`, sem fallback global. Se o par não existir, os
+smoke tests de autenticação são omitidos, sem afetar os demais checks. Use credenciais sintéticas e independentes por
+ambiente. A validação lê os valores injetados pelos contextos `vars` e `secrets`; não consulta a API administrativa dos
+Environments.
 
 Para habilitar CD automático, configure a nova Environment Variable `AUTO_CD_ENABLED` com o valor literal `true` no
 Environment `homolog` e/ou `production`. Cada Environment é independente; variável ausente ou diferente de `true`

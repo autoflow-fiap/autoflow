@@ -653,7 +653,6 @@ jobs:
     environment: ${{ needs.gate.outputs.environment }}
     permissions:
       contents: read
-      actions: read
     env:
       GITHUB_DEPLOYMENT_ENVIRONMENT: ${{ needs.gate.outputs.environment }}
       API_GATEWAY_CORS_ORIGINS: ${{ vars.API_GATEWAY_CORS_ORIGINS }}
@@ -667,41 +666,42 @@ jobs:
         env:
           DEPLOY_SHA: ${{ needs.gate.outputs.sha }}
         run: test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
-      - name: Exigir configurações no GitHub Environment selecionado
+      - name: Validar valores fornecidos pelo GitHub Environment selecionado
         id: environment-config
         env:
-          GH_TOKEN: ${{ github.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          ENV_TEST_CPF_CNPJ: ${{ (env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_HOMOLOG_TEST_CPF_CNPJ) || (env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'production' && secrets.AUTOFLOW_PRODUCTION_TEST_CPF_CNPJ) || '' }}
+          ENV_TEST_PASSWORD: ${{ (env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_HOMOLOG_TEST_PASSWORD) || (env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'production' && secrets.AUTOFLOW_PRODUCTION_TEST_PASSWORD) || '' }}
+          REPOSITORY_TEST_CPF_CNPJ: ${{ env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_TEST_CPF_CNPJ || '' }}
+          REPOSITORY_TEST_PASSWORD: ${{ env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_TEST_PASSWORD || '' }}
         shell: bash
         run: |
           set -euo pipefail
-          VARIABLE_NAMES=$(gh api --paginate "repos/$GITHUB_REPOSITORY/environments/$GITHUB_DEPLOYMENT_ENVIRONMENT/variables?per_page=30" --jq '.variables[].name')
-          for name in API_GATEWAY_CORS_ORIGINS AWS_REGION AWS_EXPECTED_ACCOUNT_ID; do
-            grep -Fxq -- "$name" <<< "$VARIABLE_NAMES" || { echo "A Variable $name precisa estar cadastrada no GitHub Environment selecionado." >&2; exit 1; }
+          for name in API_GATEWAY_CORS_ORIGINS AWS_REGION AWS_EXPECTED_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
+            [[ -n "${!name}" ]] || { echo "O valor $name precisa estar configurado no Environment selecionado." >&2; exit 1; }
           done
-          SECRET_NAMES=$(gh api --paginate "repos/$GITHUB_REPOSITORY/environments/$GITHUB_DEPLOYMENT_ENVIRONMENT/secrets?per_page=100" --jq '.secrets[].name')
-          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
-            grep -Fxq -- "$name" <<< "$SECRET_NAMES" || { echo "O Secret $name precisa estar cadastrado no GitHub Environment selecionado." >&2; exit 1; }
-          done
-          HAS_TEST_CPF_CNPJ=false
-          HAS_TEST_PASSWORD=false
-          if grep -Fxq -- AUTOFLOW_TEST_CPF_CNPJ <<< "$SECRET_NAMES"; then
-            HAS_TEST_CPF_CNPJ=true
-          fi
-          if grep -Fxq -- AUTOFLOW_TEST_PASSWORD <<< "$SECRET_NAMES"; then
-            HAS_TEST_PASSWORD=true
-          fi
-          if [[ "$HAS_TEST_CPF_CNPJ" == true && "$HAS_TEST_PASSWORD" == true ]]; then
-            echo "environment_test_credentials=true" >> "$GITHUB_OUTPUT"
-          elif [[ "$HAS_TEST_CPF_CNPJ" == false && "$HAS_TEST_PASSWORD" == false ]]; then
-            echo "environment_test_credentials=false" >> "$GITHUB_OUTPUT"
+          [[ "$GITHUB_DEPLOYMENT_ENVIRONMENT" == homolog || "$GITHUB_DEPLOYMENT_ENVIRONMENT" == production ]]
+          python -c 'import json, os; v=json.loads(os.environ["API_GATEWAY_CORS_ORIGINS"]); assert isinstance(v, list) and all(isinstance(x, str) and x.strip() for x in v), "API_GATEWAY_CORS_ORIGINS deve ser um array JSON de origens não vazias"'
+          if [[ -n "$ENV_TEST_CPF_CNPJ" && -n "$ENV_TEST_PASSWORD" ]]; then
+            echo "test_credentials_source=environment" >> "$GITHUB_OUTPUT"
+          elif [[ -z "$ENV_TEST_CPF_CNPJ" && -z "$ENV_TEST_PASSWORD" ]]; then
+            if [[ "$GITHUB_DEPLOYMENT_ENVIRONMENT" == homolog && -n "$REPOSITORY_TEST_CPF_CNPJ" && -n "$REPOSITORY_TEST_PASSWORD" ]]; then
+              echo "test_credentials_source=repository" >> "$GITHUB_OUTPUT"
+            elif [[ "$GITHUB_DEPLOYMENT_ENVIRONMENT" == homolog && ( -n "$REPOSITORY_TEST_CPF_CNPJ" || -n "$REPOSITORY_TEST_PASSWORD" ) ]]; then
+              echo "AUTOFLOW_TEST_CPF_CNPJ e AUTOFLOW_TEST_PASSWORD precisam ser fornecidos juntos." >&2
+              exit 1
+            elif [[ -z "$REPOSITORY_TEST_CPF_CNPJ" && -z "$REPOSITORY_TEST_PASSWORD" ]]; then
+              echo "test_credentials_source=none" >> "$GITHUB_OUTPUT"
+            else
+              echo "Credenciais globais de teste não podem ser usadas fora de homolog." >&2
+              exit 1
+            fi
           else
-            echo "Os Secrets AUTOFLOW_TEST_CPF_CNPJ e AUTOFLOW_TEST_PASSWORD precisam ser configurados juntos no Environment." >&2
+            echo "Os Secrets de teste do Environment selecionado precisam ser fornecidos juntos." >&2
             exit 1
           fi
-          test -n "$API_GATEWAY_CORS_ORIGINS"
-          test -n "$AWS_REGION"
-          test -n "$AWS_EXPECTED_ACCOUNT_ID"
-          python -c 'import json, os; v=json.loads(os.environ["API_GATEWAY_CORS_ORIGINS"]); assert isinstance(v, list) and all(isinstance(x, str) and x.strip() for x in v), "API_GATEWAY_CORS_ORIGINS deve ser um array JSON de origens não vazias"'
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -724,6 +724,6 @@ jobs:
           test -n "$API_GATEWAY_ORIGIN" || { echo "API_GATEWAY_ORIGIN não está configurada" >&2; exit 1; }
       - name: Executar smoke tests
         env:
-          AUTOFLOW_TEST_CPF_CNPJ: ${{ (steps.environment-config.outputs.environment_test_credentials == 'true' && secrets.AUTOFLOW_TEST_CPF_CNPJ) || (steps.environment-config.outputs.environment_test_credentials == 'false' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_TEST_CPF_CNPJ) || '' }}
-          AUTOFLOW_TEST_PASSWORD: ${{ (steps.environment-config.outputs.environment_test_credentials == 'true' && secrets.AUTOFLOW_TEST_PASSWORD) || (steps.environment-config.outputs.environment_test_credentials == 'false' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_TEST_PASSWORD) || '' }}
+          AUTOFLOW_TEST_CPF_CNPJ: ${{ (steps.environment-config.outputs.test_credentials_source == 'environment' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_HOMOLOG_TEST_CPF_CNPJ) || (steps.environment-config.outputs.test_credentials_source == 'environment' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'production' && secrets.AUTOFLOW_PRODUCTION_TEST_CPF_CNPJ) || (steps.environment-config.outputs.test_credentials_source == 'repository' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_TEST_CPF_CNPJ) || '' }}
+          AUTOFLOW_TEST_PASSWORD: ${{ (steps.environment-config.outputs.test_credentials_source == 'environment' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_HOMOLOG_TEST_PASSWORD) || (steps.environment-config.outputs.test_credentials_source == 'environment' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'production' && secrets.AUTOFLOW_PRODUCTION_TEST_PASSWORD) || (steps.environment-config.outputs.test_credentials_source == 'repository' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_TEST_PASSWORD) || '' }}
         run: python scripts/smoke_api_gateway.py "$API_GATEWAY_ORIGIN" --region "$AWS_REGION" --account "$AWS_EXPECTED_ACCOUNT_ID" --cors-origins "$API_GATEWAY_CORS_ORIGINS"
