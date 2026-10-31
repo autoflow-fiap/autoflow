@@ -1,6 +1,6 @@
 # Variables e secrets
 
-Catálogo observado no código e configuração deste repositório. CI executa automaticamente em Pull Requests para `develop`/`main` e pushes para `develop`, `main` e `feature/**`. O CD é iniciado por `workflow_dispatch` e, quando habilitado, por `push`: `develop` seleciona `homolog` e `main` seleciona `production`. O job `smoke-tests` usa o Environment validado pelo gate, tanto na execução isolada quanto após Apply, e consulta a API `autoflow-homolog` ou `autoflow-production` correspondente. Cada Environment mantém credenciais, Variables, Secrets e State próprios; não compartilhar valores entre homologação e produção.
+Catálogo observado no código e configuração deste repositório. CI executa automaticamente em Pull Requests para `develop`/`main` e pushes para `develop`, `main` e `feature/**`. O CD é iniciado por `workflow_dispatch` e, quando habilitado, por `push`: `develop` seleciona `homolog` e `main` seleciona `production`. O job `smoke-tests` usa o Environment validado pelo gate, tanto na execução isolada quanto após Apply, e consulta a API `autoflow-homolog` ou `autoflow-production` correspondente. Cada Environment mantém credenciais, Variables, Secrets e State próprios; não compartilhar valores entre homologação e produção. O opt-in automático é controlado separadamente por `AUTO_CD_ENABLED_HOMOLOG` e `AUTO_CD_ENABLED_PRODUCTION` no escopo Repository.
 
 ## GitHub Actions
 
@@ -61,6 +61,7 @@ Configure os Environments `homolog` e `production`, limitando deployments a `dev
 | `TERRAFORM_APPLY_APPROVAL_CONFIGURED` | Variable; guard suplementar de aprovação | GitHub Environment Variable; `true` somente após configurar Required reviewers efetivos no mesmo Environment | CD | `true` | Ausente/diferente bloqueia Apply. Não substitui a proteção do Environment. |
 | `ENABLE_NEWRELIC_APM` | Variable booleana que ativa o agente Java | GitHub Environment Variable de `homolog` e `production` | Plan/Apply | `true` ou `false` conforme ambiente | `homolog` exige `true`; `production` pode habilitar ou desabilitar. Quando habilitado, ausência da licença bloqueia sincronização/startup. |
 | `NEW_RELIC_LICENSE_SECRET_ID` | Variable; identificador do Secret no AWS Secrets Manager | GitHub Environment Variable de cada ambiente em `autoflow` | Apply aprovado quando APM habilitado | Não aplicável | Obrigatória quando `ENABLE_NEWRELIC_APM=true`; o script usa o AWS SDK e nunca passa a licença em argumentos. |
+| `AUTO_CD_ENABLED_HOMOLOG`, `AUTO_CD_ENABLED_PRODUCTION` | Variables independentes que habilitam o Plan automático após CI aprovada | Repository Variables; controles não sensíveis separados por ambiente | Gate de push em `develop`/`main` | `true` | O gate lê os valores injetados pelo contexto `vars`; ausente ou diferente de `true` mantém o ambiente desabilitado. Não substituem Environment protection, `apply=true` ou Required reviewers. |
 
 ## Terraform inputs
 

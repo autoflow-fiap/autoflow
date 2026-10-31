@@ -15,10 +15,12 @@ O workflow `.github/workflows/ci.yml` executa automaticamente em Pull Requests p
 `develop`, `main` e `feature/*`: testes, builds, análises de segurança e validação Terraform local. Também constrói imagens
 Docker localmente, sem publicação. A CI não usa credenciais AWS, não executa Plan remoto e não aplica recursos.
 O workflow `.github/workflows/pipeline.yml` preserva `workflow_dispatch` e também recebe `push` em `develop`/`main`.
-No caminho automático, um gate consulta `AUTO_CD_ENABLED` no Environment correspondente e aguarda a CI `ci.yml` do mesmo
-repositório, branch e SHA. Somente a conclusão `success` da execução exata libera os jobs do CD; falha, cancelamento,
-`skipped`, divergência ou timeout bloqueia o Plan. O checkout do CD usa e confirma o SHA validado. PRs e branches
-`feature/**` não iniciam CD. Uma execução manual em outra branch não alcança os jobs do CD. Smoke tests manuais são
+No caminho automático, o gate lê `AUTO_CD_ENABLED_HOMOLOG` ou `AUTO_CD_ENABLED_PRODUCTION` diretamente do contexto `vars`
+e aguarda a CI `ci.yml` do mesmo repositório, branch e SHA. As duas Repository Variables são independentes; somente o
+valor literal `true` habilita o ambiente correspondente. O gate não consulta APIs administrativas dos Environments.
+Somente a conclusão `success` da execução exata libera os jobs do CD; falha, cancelamento, `skipped`, divergência ou
+timeout bloqueia o Plan. O checkout do CD usa e confirma o SHA validado. PRs e branches `feature/**` não iniciam CD. Uma
+execução manual em outra branch não alcança os jobs do CD. Smoke tests manuais são
 exclusivos de `workflow_dispatch` em `develop`/`main`; a seleção `homolog`/`production` usa a saída validada pelo gate.
 
 O workflow existente `pr-automatico.yaml` abre um Pull Request para `develop` após push em qualquer branch diferente
@@ -104,10 +106,10 @@ smoke tests de autenticação são omitidos, sem afetar os demais checks. Use cr
 ambiente. A validação lê os valores injetados pelos contextos `vars` e `secrets`; não consulta a API administrativa dos
 Environments.
 
-Para habilitar CD automático, configure a nova Environment Variable `AUTO_CD_ENABLED` com o valor literal `true` no
-Environment `homolog` e/ou `production`. Cada Environment é independente; variável ausente ou diferente de `true`
-mantém o respectivo ambiente desabilitado. A variável não contém segredo e não substitui `TERRAFORM_APPLY_APPROVAL_CONFIGURED`,
-`apply=true` nem Required reviewers. Nenhuma configuração do GitHub é criada ou alterada por esta documentação.
+Para habilitar CD automático, defina `AUTO_CD_ENABLED_HOMOLOG=true` e/ou `AUTO_CD_ENABLED_PRODUCTION=true` como Repository
+Variables independentes. Valor ausente ou diferente de `true` mantém o respectivo ambiente desabilitado. Essas Variables
+não contêm segredos e não substituem `TERRAFORM_APPLY_APPROVAL_CONFIGURED`, `apply=true` nem Required reviewers. Nenhuma
+configuração do GitHub é criada ou alterada por esta documentação.
 
 ## New Relic
 
@@ -133,9 +135,9 @@ Para uma implantação inicial, prepare e aprove as dependências nesta ordem, s
    Flyway existentes durante a inicialização; aguarde readiness e rollout antes da validação funcional.
 6. New Relic Kubernetes e recursos de observabilidade conforme configuração do repositório `autoflow-infra`.
 
-Depois de provisionadas e validadas as dependências, habilite `AUTO_CD_ENABLED` no Environment desejado somente quando
-as configurações externas e proteções estiverem prontas; caso contrário, mantenha a variável ausente. Os workflows não
-coordenam dependências cross-repository automaticamente.
+Depois de provisionadas e validadas as dependências, habilite a Repository Variable `AUTO_CD_ENABLED_HOMOLOG` ou
+`AUTO_CD_ENABLED_PRODUCTION` somente quando as configurações externas e proteções estiverem prontas; caso contrário,
+mantenha-a ausente ou diferente de `true`. Os workflows não coordenam dependências cross-repository automaticamente.
 
 ## Kubernetes e pendências de provisionamento
 
