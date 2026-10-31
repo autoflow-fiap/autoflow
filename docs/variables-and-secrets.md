@@ -1,32 +1,33 @@
 # Variables e secrets
 
-Catálogo observado no código e configuração deste repositório. CI executa automaticamente em Pull Requests para `develop`/`main` e pushes para `develop`, `main` e `feature/**`. O CD é iniciado por `workflow_dispatch` e, quando habilitado, por `push`: `develop` seleciona `homolog` e `main` seleciona `production`. O job `smoke-tests` usa o Environment validado pelo gate, tanto na execução isolada quanto após Apply, e consulta a API `autoflow-homolog` ou `autoflow-production` correspondente. Cada Environment mantém credenciais, Variables, Secrets e State próprios; não compartilhar valores entre homologação e produção. O opt-in automático é controlado separadamente por `AUTO_CD_ENABLED_HOMOLOG` e `AUTO_CD_ENABLED_PRODUCTION` no escopo Repository.
+Este catálogo descreve as Variables e os Secrets consumidos pelos workflows e runtimes. `develop` seleciona `homolog` e
+`main` seleciona `production`; cada Environment fornece as credenciais, configurações e keys de State próprias.
 
 ## GitHub Actions
 
-O workflow `.github/workflows/ci.yml` executa testes/builds, Snyk, SonarQube e Terraform estático; o Docker build de CI não publica imagens. Pushes e Pull Requests não publicam imagens nem executam Apply. Push em `develop`/`main` pode iniciar Plan somente quando `AUTO_CD_ENABLED=true` no Environment e a CI do mesmo SHA passa. Em `workflow_dispatch`, `apply=false` executa Plan. `apply=true` autoriza publicação com tags SHA imutáveis usando `vars.DOCKERHUB_USERNAME` e o Repository Secret `secrets.DOCKERHUB_PASSWORD`, seguida do Plan; Apply exige autorização explícita e aprovação independente do Environment. Os jobs protegidos usam GitHub-hosted runners. Operações destrutivas não são autorizadas por push e só podem ser solicitadas por dispatch, com revisão do Plan e gates do Environment.
+O workflow `.github/workflows/ci.yml` executa testes/builds, Snyk, SonarQube e Terraform estático; o Docker build de CI não
+publica imagens. Pushes em `develop`/`main` iniciam o caminho automático somente com a Repository Variable correspondente
+(`AUTO_CD_ENABLED_HOMOLOG` ou `AUTO_CD_ENABLED_PRODUCTION`) igual a `true` e CI aprovada
+para o mesmo SHA; ele executa Plan, não Apply. `workflow_dispatch` com `apply=false` executa Plan. Com `apply=true`, o
+pipeline publica imagens com tag SHA, gera Plan e aplica após revisão independente do Environment. Alterações destrutivas
+exigem autorização explícita e revisão do Plan.
 
-O job `smoke-tests` continua exclusivo de `workflow_dispatch` e mantém `needs: [gate, deploy-apply]`: a execução isolada exige `smoke_tests_only=true`; a execução pós-deploy exige Apply concluído com sucesso. O Environment vem de `needs.gate.outputs.environment`, que associa `develop` a `homolog` e `main` a `production`, e `main` continua exigindo branch protegida. Antes de configurar AWS, o job valida diretamente os valores de `vars` e `secrets` injetados para o Environment selecionado; não consulta endpoints administrativos do GitHub nem requer permissão `actions: read` no `GITHUB_TOKEN`.
+O job `smoke-tests` é exclusivo de `workflow_dispatch`: a execução isolada usa `smoke_tests_only=true`; a execução
+pós-deploy exige Apply concluído com sucesso. O Environment vem de `needs.gate.outputs.environment`, que associa `develop`
+a `homolog` e `main` a `production`. O job valida os valores injetados por `vars`/`secrets` antes de configurar AWS.
 
-O job `smoke-tests` declara o Environment selecionado pelo gate. Em leitura somente-leitura ao GitHub em 31/10/2026,
-`homolog` e `production` tinham Required reviewers e políticas de branch limitadas respectivamente a `develop` e `main`.
-Cada execução do job aguarda a aprovação do Environment antes de receber seus Secrets.
+O job associa-se ao Environment selecionado; as regras de proteção desse Environment também se aplicam aos smoke tests.
 
-### Auditoria do escopo Repository-level
+### Escopo das configurações
 
-A auditoria de workflows e dos nomes cadastrados foi somente leitura, em 30/10/2026. As configurações abaixo não foram alteradas no GitHub. As candidatas à remoção são somente as cópias globais que deixam de ser necessárias para smoke tests depois de a alteração chegar a `develop` e passar por execução validada:
+Credenciais AWS, banco, JWT, SMTP, tokens públicos e State keys devem pertencer ao Environment selecionado. `SONAR_TOKEN`
+e `SNYK_TOKEN` são Repository Secrets usados por jobs de CI sem Environment. O job de publicação Docker consome
+`DOCKERHUB_USERNAME` e `DOCKERHUB_PASSWORD` no Environment protegido.
 
-| Configuração global | Tratamento após esta alteração | Evidência/condição |
-|---|---|---|
-| Repository Variables `API_GATEWAY_CORS_ORIGINS`, `AWS_REGION`, `AWS_EXPECTED_ACCOUNT_ID` | Podem ser removidas | `smoke-tests` exige que cada valor injetado esteja preenchido; os nomes estão cadastrados em `homolog` e `production`. `deploy-plan`/`deploy-apply` já usam os valores dos Environments; o Plan valida conta/região e também exige CORS não vazio. |
-| Repository Secrets `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` | Podem ser removidos | `smoke-tests` exige que os três valores injetados estejam preenchidos antes de configurar a sessão AWS; os jobs de Plan/Apply também usam os Secrets dos respectivos Environments. |
-| Repository Secrets `AUTOFLOW_TEST_CPF_CNPJ`, `AUTOFLOW_TEST_PASSWORD` | Remover somente depois de cadastrar o par Environment-only `AUTOFLOW_HOMOLOG_TEST_CPF_CNPJ`/`AUTOFLOW_HOMOLOG_TEST_PASSWORD` em `homolog` | O par global permanece como fallback temporário somente quando o par Environment-only de homolog está totalmente ausente. Um par incompleto falha fechado. `production` usa somente `AUTOFLOW_PRODUCTION_TEST_CPF_CNPJ`/`AUTOFLOW_PRODUCTION_TEST_PASSWORD` do Environment e nunca usa os Secrets globais; sem esse par, os testes autenticados opcionais são omitidos. |
-
-Os pares de teste de cada Environment são independentes e devem ser cadastrados completos. Em `homolog`, se o par Environment-only não existir, o par global é usado para manter compatibilidade; se apenas um Secret Environment-only existir, o job falha antes de configurar AWS. Para habilitar o login fictício em produção, cadastre o par `AUTOFLOW_PRODUCTION_TEST_*` sintético e apropriado àquela conta; não reutilize credenciais reais ou de homologação. Após migrar o par de homolog para os nomes Environment-only, validar os smoke tests e retirar o fallback, as cópias globais `AUTOFLOW_TEST_*` poderão ser excluídas.
-
-Os nomes Environment-only de teste são o contrato esperado para a migração; a consulta somente leitura de 30/10/2026 não encontrou esses Secrets e esta alteração não os cria no GitHub. Sem os pares configurados, homolog usa o fallback global existente e production omite somente a etapa opcional de autenticação.
-
-Estas configurações precisam continuar globais no estado observado: `SONAR_TOKEN` e `SNYK_TOKEN`, usados por jobs sem Environment nos workflows `ci.yml`/`pipeline.yml`; `DOCKERHUB_USERNAME` e `DOCKERHUB_PASSWORD`, usados no job protegido de publicação e ainda ausentes das Variables/Secrets dos Environments. `GITHUB_TOKEN`/`github.token` é gerado pelo Actions, não é Repository Secret para remoção. A auditoria não autoriza excluir outras configurações Repository-level nem altera os usos dos demais jobs.
+Para smoke tests autenticados, configure pares sintéticos completos por Environment: `AUTOFLOW_HOMOLOG_TEST_*` em
+`homolog` e `AUTOFLOW_PRODUCTION_TEST_*` em `production`. Em homologação, o workflow aceita `AUTOFLOW_TEST_*` como
+fallback somente quando os dois Secrets Environment-only estão ausentes; um par parcial falha. Em produção não há
+fallback global; sem o par próprio, o smoke autenticado é omitido. Não reutilize credenciais reais ou entre ambientes.
 
 Configure os Environments `homolog` e `production`, limitando deployments a `develop` e `main`. Não cadastre `EKS_CLUSTER_NAME` nem `API_GATEWAY_ORIGIN`: após validar a identidade AWS, região e configuração do State, o workflow seleciona `eks-autoflow`/`autoflow-homolog` ou `eks-autoflow-production`/`autoflow-production`. `AWS_TF_STATE_KEY` e `AWS_RDS_STATE_KEY` devem ser distintos e começar por `homolog/` ou `production/` conforme o Environment; os sufixos são externos. Consulte [Operação de CI/CD](../.github/CI-CD-AWS.md) para os gates, checks do bucket e ordem de deploy.
 
@@ -36,7 +37,7 @@ Configure os Environments `homolog` e `production`, limitando deployments a `dev
 |---|---|---|---|---|---|
 | `SONAR_TOKEN` | Secret; autenticação SonarQube | GitHub Repository secret; token emitido pelo SonarQube | CI condicional | Não aplicável | `.github/workflows/ci.yml`; step não roda em PR de fork, mas quando roda sem token a análise pode falhar. |
 | `SNYK_TOKEN` | Secret; autenticação Snyk | GitHub Repository Secret; token Snyk | CI condicional | Não aplicável | `ci.yml`; usado pelas análises de segurança existentes. |
-| `DOCKERHUB_PASSWORD` | Secret; autenticação para publicar imagem | GitHub Repository Secret; token Docker Hub de publicação | CD manual com `apply=true` | Não aplicável | `pipeline.yml`; obrigatório no job de publicação, protegido pelo Environment selecionado. |
+| `DOCKERHUB_PASSWORD` | Secret; autenticação para publicar imagem | Secret acessível ao job de publicação protegido pelo Environment | CD manual com `apply=true` | Não aplicável | `pipeline.yml`; obrigatório no job `docker-publish`. |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` | Secrets; credenciais temporárias AWS da mesma sessão | GitHub Environment Secrets de `homolog` e `production`, com valores de cada conta | CD | Não aplicável | `pipeline.yml`; usados por Plan e Apply; renovar juntos conforme validade da sessão. |
 | `TF_PLAN_ENCRYPTION_KEY` | Secret; chave para cifrar o plan binário antes do upload | GitHub Environment Secret de cada ambiente; gerar valor aleatório com no mínimo 32 caracteres | Plan/Apply | Não aplicável | `pipeline.yml`; mesmo valor no Plan e Apply daquele Environment; nunca publicar em logs/artifact. |
 | `NEW_RELIC_LICENSE_KEY` | Secret; fonte de bootstrap da License Key de ingestão | GitHub Environment Secret de `homolog` e, quando habilitado, `production` no repositório `autoflow` | Apply aprovado quando `ENABLE_NEWRELIC_APM=true` | Não aplicável | `pipeline.yml` injeta apenas no passo de sincronização. Não é solicitado no Plan ou no repositório infra. |
@@ -44,7 +45,7 @@ Configure os Environments `homolog` e `production`, limitando deployments a `dev
 | `AUTOFLOW_JWT_SECRET` | Secret; assinatura JWT da aplicação | GitHub Environment Secret; segredo compatível com autenticação daquele ambiente | CD | Não aplicável | Mesmo workflow/script; usado somente no Apply; sem default. |
 | `AUTOFLOW_MAIL_PASSWORD` | Secret; autenticação SMTP | GitHub Environment Secret; credencial SMTP apropriada ao ambiente | CD | Não aplicável | Mesmo workflow/script; usado somente no Apply; sem default. |
 | `AUTOFLOW_PUBLIC_TOKEN_SECRET` | Secret; tokens públicos de orçamento | GitHub Environment Secret; segredo independente por ambiente | CD | Não aplicável | Mesmo workflow/script; usado somente no Apply; sem default. |
-| `AUTOFLOW_TEST_CPF_CNPJ`, `AUTOFLOW_TEST_PASSWORD` | Secrets opcionais globais para compatibilidade | Repository Secrets usados somente como fallback de homolog; serão removíveis após migração | Opcional | Não aplicável | `pipeline.yml`; nunca injetados em produção. |
+| `AUTOFLOW_TEST_CPF_CNPJ`, `AUTOFLOW_TEST_PASSWORD` | Secrets opcionais de fallback | Repository Secrets usados somente quando o par de homologação do Environment está ausente | Smoke de homolog | Não aplicável | `pipeline.yml`; nunca usados em produção. |
 | `AUTOFLOW_HOMOLOG_TEST_CPF_CNPJ`, `AUTOFLOW_HOMOLOG_TEST_PASSWORD` | Secrets opcionais para smoke autenticado em homolog | Environment Secrets exclusivos de `homolog`; dados sintéticos | Opcional | Não aplicável | `pipeline.yml`/`smoke_api_gateway.py`; precisam existir como par; prevalecem sobre o fallback global. |
 | `AUTOFLOW_PRODUCTION_TEST_CPF_CNPJ`, `AUTOFLOW_PRODUCTION_TEST_PASSWORD` | Secrets opcionais para smoke autenticado em produção | Environment Secrets exclusivos de `production`; dados sintéticos próprios | Opcional | Não aplicável | `pipeline.yml`/`smoke_api_gateway.py`; precisam existir como par; não há fallback global. |
 | `GITHUB_TOKEN` | Secret automático do GitHub para abrir PRs | Gerado pelo Actions; não cadastrar | CI/CD automático de PR | Não aplicável | `pipeline.yml` e `pr-automatico.yaml`; `secrets.GITHUB_TOKEN`; sem cadastro manual. |
@@ -58,13 +59,12 @@ Configure os Environments `homolog` e `production`, limitando deployments a `dev
 | `AWS_TERRAFORM_STATE_BUCKET` | Variable; bucket S3 do ambiente | GitHub Environment Variable; bucket pertencente à conta esperada | CD | Não aplicável | Workflow/Terraform; obrigatório; owner é conferido antes de inicializar o backend. |
 | `AWS_TF_STATE_KEY` | Variable; key S3 do State da aplicação | Obrigatória no GitHub Environment selecionado; sufixo fornecido externamente | CD | Prefixo `homolog/` ou `production/`, com sufixo externo | Workflow/Terraform; sem default, exclusiva do root e distinta das demais keys no bucket. |
 | `AWS_RDS_STATE_KEY` | Variable; key S3 do State RDS consumido pela aplicação | Obrigatória no GitHub Environment selecionado; deve corresponder ao State RDS do mesmo ambiente | CD | Prefixo `homolog/` ou `production/`, com sufixo externo | Mapeada a `TF_VAR_rds_state_key`; sem default, igual à key do produtor RDS e distinta da key da aplicação. |
-| `DOCKERHUB_USERNAME` | Variable; namespace Docker Hub | GitHub Repository Variable compartilhada | Push `develop` e `main` | `usuario-exemplo` | Namespace das imagens; sem default. Tags são sempre `${{ github.sha }}`. |
+| `DOCKERHUB_USERNAME` | Variable; namespace Docker Hub | Variable acessível ao job protegido de publicação | CD com `apply=true` | `usuario-exemplo` | Namespace das imagens; tags são `${{ github.sha }}`. Configure no escopo autorizado para o Environment selecionado. |
 | `API_GATEWAY_CORS_ORIGINS` | Variable; allowlist CORS | GitHub Environment Variable de cada ambiente; lista JSON exata | CD | `[]` | Workflow/Terraform; obrigatória; deve ser array JSON. O endpoint HTTPS é descoberto da API do ambiente. |
-| `AUTO_CD_ENABLED` | Variable; habilita o início automático do Plan após CI | GitHub Environment Variable independente em `homolog` e `production` | CD automático opt-in | `true` | Estava ausente nos dois Environments em 31/10/2026; o caminho automático permanecia desabilitado. Não autoriza publicação de imagens nem Apply. |
-| `TERRAFORM_APPLY_APPROVAL_CONFIGURED` | Variable; guard suplementar de aprovação | GitHub Environment Variable; `true` somente após configurar Required reviewers efetivos no mesmo Environment | CD | `true` | Estava `false` em `homolog` e `production` em 31/10/2026, bloqueando Apply. Não substitui a proteção do Environment. |
-| `ENABLE_NEWRELIC_APM` | Variable booleana que ativa o agente Java | GitHub Environment Variable de `homolog` e `production` | Plan/Apply | `true` ou `false` conforme ambiente | Estava `true` nos dois Environments em 31/10/2026; isso não comprova o agente ativo em runtime. Quando habilitado, ausência da licença bloqueia sincronização/startup. |
+| `TERRAFORM_APPLY_APPROVAL_CONFIGURED` | Variable; guard suplementar de aprovação | GitHub Environment Variable; definir `true` somente após configurar Required reviewers efetivos no mesmo Environment | CD | `true` | Ausente ou diferente de `true` bloqueia Apply. Não substitui a proteção do Environment. |
+| `ENABLE_NEWRELIC_APM` | Variable booleana que ativa o agente Java | GitHub Environment Variable de `homolog` e `production` | Plan/Apply | `true` ou `false` conforme ambiente | Ativa a sincronização da License Key e a instrumentação Java no deployment correspondente. Ausência da licença bloqueia sincronização/startup. |
 | `NEW_RELIC_LICENSE_SECRET_ID` | Variable; identificador do Secret no AWS Secrets Manager | GitHub Environment Variable de cada ambiente em `autoflow` | Apply aprovado quando APM habilitado | Não aplicável | Obrigatória quando `ENABLE_NEWRELIC_APM=true`; o script usa o AWS SDK e nunca passa a licença em argumentos. |
-| `AUTO_CD_ENABLED_HOMOLOG`, `AUTO_CD_ENABLED_PRODUCTION` | Variables independentes que habilitam o Plan automático após CI aprovada | Repository Variables; controles não sensíveis separados por ambiente | Gate de push em `develop`/`main` | `true` | O gate lê os valores injetados pelo contexto `vars`; ausente ou diferente de `true` mantém o ambiente desabilitado. Não substituem Environment protection, `apply=true` ou Required reviewers. |
+| `AUTO_CD_ENABLED_HOMOLOG`, `AUTO_CD_ENABLED_PRODUCTION` | Variables independentes que habilitam o Plan automático após CI aprovada | Repository Variables; controles não sensíveis separados por ambiente | Gate de push em `develop`/`main` | `true` | O gate lê os valores injetados pelo contexto `vars`; ausente ou diferente de `true` mantém o ambiente desabilitado. Não substituem Environment protection nem `apply=true`. |
 
 ## Terraform inputs
 
@@ -107,6 +107,6 @@ O `nri-bundle` e a aplicação usam por default o namespace `default`; o sincron
 
 **Divergências relevantes:** GitHub `AUTOFLOW_DB_USERNAME/PASSWORD`, `AUTOFLOW_JWT_SECRET`, `AUTOFLOW_MAIL_PASSWORD` e `AUTOFLOW_PUBLIC_TOKEN_SECRET` são nomes de transporte; chaves reais do Secret Kubernetes usam `SPRING_DATASOURCE_USERNAME/PASSWORD`, `JWT_SECRET`, `MAIL_PASSWORD`, `APP_PUBLIC_TOKEN_SECRET`. Não confundir `AWS_TF_STATE_KEY` da aplicação com keys de outros roots.
 
-**Observação operacional:** os Environments e valores descritos são configuração necessária para ativar a pipeline; a existência/configuração efetiva no GitHub não foi verificada localmente. A documentação em [.github/CI-CD-AWS.md](../.github/CI-CD-AWS.md) descreve os passos restantes.
+Para instruções de configuração e fluxo de deployment, consulte [Operação de CI/CD AWS](../.github/CI-CD-AWS.md).
 
 **Fontes:** `.github/workflows/pipeline.yml`, `.github/CI-CD-AWS.md`, `infra/vars.tf`, `application.properties`, `docker-compose.yml`, `k8s/` e `scripts/apply_k8s_secret.py`.

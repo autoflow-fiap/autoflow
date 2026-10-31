@@ -32,7 +32,7 @@ não publicam imagens. O Environment configurado também protege os Plans autom�
 O scan Snyk existente é preservado com seu comportamento não bloqueante. O Plan e o Apply vinculam branch, Environment,
 conta esperada, região, bucket e keys do ambiente; o Apply reutiliza o artifact criptografado da mesma execução e
 confirma seus hashes, metadados e commit. A opção `allow_destructive` tem default `false` e só é considerada em
-`workflow_dispatch`, após revisão do Plan e aprovação dos Required reviewers do Environment. O Apply também requer
+`workflow_dispatch`, após revisão do Plan e aprovação das proteções configuradas no Environment. O Apply também requer
 `apply=true`, passa por aprovação independente do Environment e confirma `TERRAFORM_APPLY_APPROVAL_CONFIGURED=true`.
 O Apply revalida o mesmo Plan antes de aplicá-lo.
 
@@ -71,16 +71,15 @@ ou State de outro ambiente. A região é fornecida pelo Environment e validada a
 verificações de ownership do bucket e do objeto RDS usam `head-bucket`/`head-object --expected-bucket-owner` pela AWS CLI
 antes de inicializar o backend e ler os outputs remotos; esse argumento não é passado ao Terraform.
 
-Não configure nomes de cluster/API nem account IDs no repositório. Ao mudar a conta Learner Lab, atualize os Secrets e
-Variables daquele Environment, o bucket/keys de State e as roles/credenciais autorizadas; não é necessário alterar
-código para trocar a conta. A portabilidade declarada não comprova permissões IAM, cotas, recursos ou saldo disponíveis
-na nova conta.
+Não configure nomes de cluster/API nem account IDs no repositório. Ao mudar a conta AWS, atualize os Secrets e Variables
+daquele Environment, o bucket/keys de State e as roles/credenciais autorizadas. A mudança de conta não concede
+permissões IAM nem quotas; prepare esses recursos antes do deployment.
 
 ## Publicação Docker
 
-Cada publicação usa tags imutáveis com o SHA do commit para `autoflow-backend` e `autoflow-frontend`. O workflow usa
-`vars.DOCKERHUB_USERNAME` e o Repository Secret `secrets.DOCKERHUB_PASSWORD` tanto para homologação quanto para
-produção. Não configure a senha como Variable nem grave credenciais Docker no repositório.
+Cada publicação usa tags imutáveis com o SHA do commit para `autoflow-backend` e `autoflow-frontend`. O job protegido
+consome `vars.DOCKERHUB_USERNAME` e `secrets.DOCKERHUB_PASSWORD` no escopo selecionado para o deployment. Configure a
+senha como Secret, nunca como Variable, e não grave credenciais Docker no repositório.
 
 ## Secrets e Variables
 
@@ -89,22 +88,19 @@ Configure as credenciais AWS temporárias e os dados da aplicação separadament
 keys, credenciais de banco/JWT e configuração New Relic coerentes dentro do mesmo Environment. Consulte a
 [matriz completa](../docs/variables-and-secrets.md); não duplique Secrets de produção em homologação.
 
-`SONAR_TOKEN` e `SNYK_TOKEN` permanecem Repository Secrets porque são usados por jobs sem Environment nos workflows de
-CI/CD. `DOCKERHUB_PASSWORD` é Repository Secret e `DOCKERHUB_USERNAME` é Repository Variable enquanto não forem
-cadastrados nos Environments; o job protegido de publicação ainda depende desses valores globais. O inventário de cópias
-globais removíveis após esta alteração está em [variables-and-secrets.md](../docs/variables-and-secrets.md).
+`SONAR_TOKEN` e `SNYK_TOKEN` são Repository Secrets usados por jobs de CI que não declaram Environment. O job protegido de
+publicação lê `DOCKERHUB_USERNAME` e `DOCKERHUB_PASSWORD`; configure-os no escopo autorizado para o deployment e não
+grave credenciais Docker no repositório.
 
-`AUTOFLOW_TEST_CPF_CNPJ` e `AUTOFLOW_TEST_PASSWORD` são Secrets opcionais globais e permanecem como fallback temporário
-somente para `homolog`. Para migrar homologação sem misturar escopos, cadastre o par Environment-only
-`AUTOFLOW_HOMOLOG_TEST_CPF_CNPJ`/`AUTOFLOW_HOMOLOG_TEST_PASSWORD`; se ambos não existirem, o workflow usa o par global; se
-somente um existir, o job falha fechado antes de configurar AWS. Depois de validar homologação, remova o fallback e os
-Secrets globais.
+Para smoke tests autenticados, prefira o par `AUTOFLOW_HOMOLOG_TEST_CPF_CNPJ`/
+`AUTOFLOW_HOMOLOG_TEST_PASSWORD` no Environment `homolog`. O workflow aceita o par global
+`AUTOFLOW_TEST_CPF_CNPJ`/`AUTOFLOW_TEST_PASSWORD` como fallback apenas quando os dois valores Environment-only estão
+ausentes; um par parcial falha antes de configurar AWS.
 
 Em `production`, o workflow aceita somente o par Environment-only
 `AUTOFLOW_PRODUCTION_TEST_CPF_CNPJ`/`AUTOFLOW_PRODUCTION_TEST_PASSWORD`, sem fallback global. Se o par não existir, os
 smoke tests de autenticação são omitidos, sem afetar os demais checks. Use credenciais sintéticas e independentes por
-ambiente. A validação lê os valores injetados pelos contextos `vars` e `secrets`; não consulta a API administrativa dos
-Environments.
+ambiente. A validação lê os valores injetados pelos contextos `vars` e `secrets`.
 
 Para habilitar CD automático, defina `AUTO_CD_ENABLED_HOMOLOG=true` e/ou `AUTO_CD_ENABLED_PRODUCTION=true` como Repository
 Variables independentes. Valor ausente ou diferente de `true` mantém o respectivo ambiente desabilitado. Essas Variables
@@ -113,12 +109,11 @@ configuração do GitHub é criada ou alterada por esta documentação.
 
 ## New Relic
 
-O APM Java, os logs JSON correlacionados e a configuração Kubernetes existentes permanecem associados à aplicação.
-Se `ENABLE_NEWRELIC_APM=true`, o Apply valida `NEW_RELIC_LICENSE_SECRET_ID` e sincroniza `NEW_RELIC_LICENSE_KEY` do
+O backend inclui o agente New Relic APM, logs JSON correlacionados e eventos de negócio. Se
+`ENABLE_NEWRELIC_APM=true`, o Apply valida `NEW_RELIC_LICENSE_SECRET_ID` e sincroniza `NEW_RELIC_LICENSE_KEY` do
 GitHub Environment Secret para AWS Secrets Manager e o Secret Kubernetes `newrelic-license` no namespace `default`.
-Esse mesmo fluxo atende `production` quando habilitado; produção pode manter o APM desabilitado até sua configuração
-externa estar pronta. O Secret não é gravado em Terraform State, logs, argumentos ou artifacts. A sessão AWS precisa
-das permissões de Secrets Manager e Kubernetes correspondentes.
+Esse fluxo se aplica a qualquer Environment com `ENABLE_NEWRELIC_APM=true`. O Secret não é gravado em Terraform State,
+logs, argumentos ou artifacts. A sessão AWS precisa das permissões de Secrets Manager e Kubernetes correspondentes.
 
 Dashboards, Synthetic e componentes New Relic gerenciados pelo root `autoflow-infra` continuam sob responsabilidade
 daquele repositório e seus States por ambiente; este workflow não cria dashboards ou recursos New Relic adicionais.
@@ -139,22 +134,14 @@ Depois de provisionadas e validadas as dependências, habilite a Repository Vari
 `AUTO_CD_ENABLED_PRODUCTION` somente quando as configurações externas e proteções estiverem prontas; caso contrário,
 mantenha-a ausente ou diferente de `true`. Os workflows não coordenam dependências cross-repository automaticamente.
 
-## Kubernetes e pendências de provisionamento
+## Kubernetes e segurança dos Secrets
 
-O Terraform da aplicação preserva Deployments, Services, ConfigMap, requests/limits e o HPA existente: 1–3 réplicas,
-CPU alvo de 50%, com requests/limits declarados. Não há mudança de namespace; os ambientes usam clusters dedicados.
+O Terraform da aplicação gerencia Deployments, Services, ConfigMap, requests/limits e o HPA: 1–3 réplicas, CPU alvo de
+50%. O HPA requer que o cluster exponha `metrics.k8s.io`. O manifesto
+`k8s-local/metrics-server.yaml` é apenas para desenvolvimento local e usa `--kubelet-insecure-tls` e
+`insecureSkipTLSVerify: true`; não o use em clusters dedicados.
 
-A presença do Metrics Server de produção não foi confirmada. Antes de aceitar métricas/HPA no cluster real, verifique a
-API `metrics.k8s.io`. Se estiver ausente, a instalação precisa ser segura, declarativa e compatível com o cluster. Não
-copie `k8s-local/metrics-server.yaml` para produção: ele usa `--kubelet-insecure-tls` e `insecureSkipTLSVerify: true`.
-Essa verificação permanece uma pendência de provisionamento; não foi executada contra AWS nesta alteração.
-
-Os manifests preenchidos de Secrets foram removidos em `develop` e não devem ser reintroduzidos. Como `main` ainda pode
-conter os manifests historicamente versionados, a remoção deve chegar por Pull Request aprovado antes de habilitar o
-deploy de produção; não reescreva o histórico Git.
-
-## Estado das validações
-
-Os testes e verificações locais da branch não consultam AWS, Terraform State remoto, GitHub Environments ou clusters.
-Assim, a existência/configuração efetiva dos Environments, buckets/keys, credenciais, reviewers, permissões IAM,
-Metrics Server, recursos AWS e deploys permanece a confirmar pelos responsáveis antes da primeira execução de produção.
+Secrets de aplicação são injetados pelo workflow a partir dos GitHub Environment Secrets via
+`scripts/apply_k8s_secret.py`; não mantenha valores preenchidos em manifests versionados. Restringa leitura de Kubernetes
+Secrets a identidades necessárias, use o controle KMS do cluster e rotacione credenciais que tenham sido expostas ou
+armazenadas em Terraform State.

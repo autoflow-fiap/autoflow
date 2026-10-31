@@ -1,7 +1,9 @@
 # AutoFlow
 
 Sistema de gerenciamento de ordens de serviço para oficinas. A aplicação reúne uma SPA Angular e um backend Spring Boot
-organizado em Clean Architecture; o schema PostgreSQL é mantido por migrations Flyway neste repositório.
+organizado em Clean Architecture. Implementa cadastro e consulta operacional de clientes, veículos, usuários, serviços e
+ordens de serviço, além de orçamento público e acompanhamento de status. O schema PostgreSQL é mantido por migrations
+Flyway neste repositório.
 
 ## Tecnologias e papel na arquitetura
 
@@ -73,8 +75,7 @@ O login serverless recebe CPF/CNPJ e senha no API Gateway, que invoca a Lambda. 
 backend valida assinatura, claims, estado e perfil atual do usuário. O contrato e os cenários de teste estão no guia
 OpenAPI e na [sequência de autenticação](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/api-gateway/arquitetura.md).
 
-Notificações de OS usam SMTP a partir do backend; não há função serverless de notificações declarada nos quatro
-repositórios. Esse ponto permanece como lacuna em relação ao objetivo do enunciado da Fase 3.
+O backend envia notificações de ordens de serviço por SMTP.
 
 ## Implantação e CI/CD
 
@@ -84,31 +85,23 @@ aplicação e New Relic. Os workflows são independentes; consulte [operação d
 
 - `ci.yml` valida Pull Requests para `develop`/`main` e pushes para `develop`, `main` e `feature/**`: testes, builds,
   análise estática/segurança e Terraform sem Apply AWS.
-- `pipeline.yml` recebe `push` em `develop`/`main`. O caminho automático aguarda sucesso da CI para o mesmo SHA e exige
-  `AUTO_CD_ENABLED=true` no Environment selecionado. Em consulta somente-leitura ao GitHub em 31/10/2026, a Variable
-  estava ausente em `homolog` e `production`; portanto, o caminho automático estava desabilitado.
+- `pipeline.yml` recebe `push` em `develop`/`main`. O caminho automático exige a Repository Variable correspondente
+  (`AUTO_CD_ENABLED_HOMOLOG` ou `AUTO_CD_ENABLED_PRODUCTION`) igual a `true` e sucesso da CI para o mesmo SHA; executa
+  Plan, não publica imagens nem aplica recursos.
 - No `workflow_dispatch`, `apply=false` executa Plan. `apply=true` publica imagens com tag SHA, gera Plan e solicita
   aprovação separada para Apply e rollout. Smoke tests são executados após o Apply ou por dispatch com
   `smoke_tests_only=true`.
-- Após o PR #113, smoke tests usam o Environment validado pelo gate (`homolog` para `develop`, `production` para `main`),
-  inclusive na execução isolada. Os Environments tinham Required reviewers e políticas de branch correspondentes.
-- `TERRAFORM_APPLY_APPROVAL_CONFIGURED` estava `false` em `homolog` e `production`, bloqueando Apply. Regrasets ativos
-  exigiam Pull Request e checks em `develop` e `main`; isso foi verificado somente-leitura no GitHub em 31/10/2026.
-- `pr-automatico.yaml` cria Pull Request para `develop` conforme seus filtros. A proteção efetiva de `main` também é
-  exigida pelo workflow para jobs de produção.
+- Os smoke tests usam o Environment validado pelo gate (`homolog` para `develop`, `production` para `main`), inclusive
+  na execução isolada. A proteção configurada para esse Environment também se aplica ao job.
+- Apply exige `TERRAFORM_APPLY_APPROVAL_CONFIGURED=true` e usa o GitHub Environment selecionado (`homolog` ou
+  `production`); configure Required reviewers e restrições de branch nesses Environments. `main` exige proteção de branch.
+- `pr-automatico.yaml` cria Pull Request para `develop` conforme seus filtros.
 
-O Terraform declara o HPA do backend entre 1 e 3 réplicas, com alvo médio de CPU em 50%. A instalação de Metrics Server e
-o HPA em um cluster AWS não foram verificados. New Relic, dashboards, condições de alerta e ingestão também dependem das
-Variables e do Apply do repositório de infraestrutura. `ENABLE_NEWRELIC_APM` estava `true` nos dois Environments em
-31/10/2026; a configuração não comprova que o agente esteja ativo em runtime.
+Configure proteção de branch em `develop` e `main` para exigir Pull Request e checks da CI.
 
-## Evidência de implantação
-
-**Implementado:** backend, frontend, Dockerfiles, manifests Kubernetes, HPA e workflows estão versionados. **Validado:**
-[AutoFlow CI](https://github.com/autoflow-fiap/autoflow/actions/runs/41163079183) concluiu com sucesso; a [Pipeline](https://github.com/autoflow-fiap/autoflow/actions/runs/41163079185)
-falhou no gate antes do Plan. **Implantado:** não comprovado; não há evidência de Apply ou aplicação ativa na AWS, e nenhum
-endpoint de produção ou homologação é publicado como ativo. A [execução 41163573967 de `autoflow-infra`](https://github.com/autoflow-fiap/autoflow-infra/actions/runs/41163573967)
-validou CI e Plan VPC/EKS com 23 criações, 0 alterações, 0 destruições e artifact criptografado; Apply não foi executado.
+O Terraform declara o HPA do backend entre 1 e 3 réplicas, com alvo médio de CPU de 50%; o cluster deve expor
+`metrics.k8s.io` para o autoscaling funcionar. O agente APM Java usa `ENABLE_NEWRELIC_APM`; monitoramento Kubernetes,
+dashboards, alertas e Synthetic são gerenciados pelo root `autoflow-infra` conforme suas Variables.
 
 ## Documentação relacionada
 
