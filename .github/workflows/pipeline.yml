@@ -310,6 +310,7 @@ jobs:
       TF_VAR_aws_allowed_account_ids: '["${{ vars.AWS_EXPECTED_ACCOUNT_ID }}"]'
       TF_VAR_region_default: ${{ vars.AWS_REGION }}
       TF_VAR_enable_newrelic_apm: ${{ vars.ENABLE_NEWRELIC_APM }}
+      TF_VAR_enable_http_request_logging: ${{ github.ref == 'refs/heads/main' && 'false' || vars.ENABLE_HTTP_REQUEST_LOGGING || 'false' }}
       TF_VAR_deployment_environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
       ENABLE_NEWRELIC_APM: ${{ vars.ENABLE_NEWRELIC_APM }}
       NEW_RELIC_LICENSE_SECRET_ID: ${{ vars.NEW_RELIC_LICENSE_SECRET_ID }}
@@ -494,6 +495,7 @@ jobs:
       TF_VAR_aws_allowed_account_ids: '["${{ vars.AWS_EXPECTED_ACCOUNT_ID }}"]'
       TF_VAR_region_default: ${{ vars.AWS_REGION }}
       TF_VAR_enable_newrelic_apm: ${{ vars.ENABLE_NEWRELIC_APM }}
+      TF_VAR_enable_http_request_logging: ${{ github.ref == 'refs/heads/main' && 'false' || vars.ENABLE_HTTP_REQUEST_LOGGING || 'false' }}
       TF_VAR_deployment_environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
       ENABLE_NEWRELIC_APM: ${{ vars.ENABLE_NEWRELIC_APM }}
       NEW_RELIC_LICENSE_SECRET_ID: ${{ vars.NEW_RELIC_LICENSE_SECRET_ID }}
