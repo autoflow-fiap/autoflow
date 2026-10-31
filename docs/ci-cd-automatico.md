@@ -22,13 +22,19 @@ automático usa o Environment e as proteções existentes e pode executar verifi
 
 ## Execução manual e Apply
 
-O `workflow_dispatch` existente permanece disponível independentemente das Variables `AUTO_CD_ENABLED_*`. A publicação de imagens e
-o Apply continuam exclusivos de uma execução manual com `apply=true`, aprovação exigida pelo GitHub Environment e os
-guards de Apply existentes, incluindo `TERRAFORM_APPLY_APPROVAL_CONFIGURED=true`. A aprovação do Plan, inclusive de um
-Plan automático, não autoriza Apply. Os controles de operações destrutivas permanecem separados.
+O `workflow_dispatch` permanece disponível independentemente das Variables `AUTO_CD_ENABLED_*`. A publicação de imagens e
+o Apply ocorrem apenas em dispatch com `apply=true`; o job de Apply usa o Environment selecionado e exige
+`TERRAFORM_APPLY_APPROVAL_CONFIGURED=true`. Configure Required reviewers e restrições de branch nos Environments para
+proteger os deployments. A aprovação do Plan, inclusive de um Plan automático, não autoriza Apply.
+
+## Smoke tests
+
+O job de smoke tests é exclusivo de `workflow_dispatch`. Usa o Environment validado pelo gate
+(`needs.gate.outputs.environment`) tanto para a execução isolada quanto após Apply: `homolog` para `develop` e
+`production` para `main`. Assim, os Secrets e as Variables usados pelo teste vêm do mesmo ambiente do deploy; a
+proteção configurada para esse Environment também se aplica ao job de smoke tests.
 
 ## Validação
 
-Os testes locais verificam a validação da origem do evento, do branch/SHA e da CI correspondente, além dos casos de
-Variable ausente, `false` e `true`. Essa validação local não comprova a execução remota de workflows, a configuração
-efetiva dos Environments nem a disponibilidade ou permissões de recursos AWS.
+Os testes locais verificam a origem do evento, branch/SHA, CI correspondente e os casos de Variable ausente, `false` e
+`true`. Antes do dispatch, configure o Environment, suas proteções e os recursos AWS exigidos pelo Plan/Apply.

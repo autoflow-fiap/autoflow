@@ -1,245 +1,113 @@
 # AutoFlow
 
-Sistema de gerenciamento de ordens de serviço para oficinas mecânicas. Controla o ciclo completo de atendimento:
-abertura de OS, diagnóstico, orçamento, execução e encerramento, com controle de acesso por perfil e área do cliente.
+Sistema de gerenciamento de ordens de serviço para oficinas. A aplicação reúne uma SPA Angular e um backend Spring Boot
+organizado em Clean Architecture. Implementa cadastro e consulta operacional de clientes, veículos, usuários, serviços e
+ordens de serviço, além de orçamento público e acompanhamento de status. O schema PostgreSQL é mantido por migrations
+Flyway neste repositório.
 
----
+## Tecnologias e papel na arquitetura
 
-## Estrutura do Repositório
+- Backend: Java 21, Spring Boot 3.5, Spring Security, JPA e Flyway.
+- Frontend: Angular 17, TypeScript e Angular Material.
+- Execução: Docker, Kubernetes e Terraform; CI/CD por GitHub Actions.
+- Observabilidade: agente New Relic, logs JSON correlacionados e eventos de negócio.
 
+O Terraform deste repositório gerencia workloads e serviços Kubernetes, ConfigMaps, HPA e configuração Nginx. O
+`autoflow-infra` declara VPC/EKS, API Gateway HTTP API v2, VPC Link, ALB interno e integração New Relic;
+`autoflow-db` provisiona o RDS; `autoflow-lambda` mantém a autenticação serverless.
+
+```mermaid
+flowchart LR
+  Browser[Navegador / Angular] -->|HTTPS e rotas de negócio| API[API Gateway HTTP API v2]
+  API -->|POST /auth/login| Lambda[Lambda CPF/CNPJ e JWT]
+  API -->|VPC Link| ALB[ALB interno]
+  ALB --> FE[Nginx / frontend no EKS]
+  ALB --> BE[Spring Boot no EKS]
+  Lambda --> DB[(RDS PostgreSQL)]
+  BE --> DB
+  BE -.->|APM, logs e métricas — se habilitados| NR[New Relic]
 ```
-autoflow/
-├── backend/    # API REST — Java 21 + Spring Boot
-└── frontend/   # SPA — Angular 17 + Angular Material
-```
 
----
-## Documentação do Projeto
+Para a arquitetura C4, rede, autenticação e integração entre os serviços, consulte
+[arquitetura do API Gateway](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/api-gateway/arquitetura.md).
+O fluxo de abertura da OS está em [fluxo_principal.mermaid](docs/diagramas-sequencia/fluxo_principal.mermaid).
 
-Este README é o ponto de entrada da entrega. Para os detalhes técnicos, consulte:
+## Executar e validar localmente
 
-- [Backend](backend/README.md): API Spring Boot, configuração, testes, Swagger e Docker.
-- [Frontend](frontend/README.md): aplicação Angular, rotas, configuração e execução.
-- [Arquitetura do backend](docs/architecture.md).
-- [Diagramas de sequência](docs/diagramas-sequencia/diagrama-sequencia.md).
-- [Fluxo de orçamento público](docs/fluxo-orcamento-publico.md).
-- [Contrato OpenAPI versionado](docs/openapi/autoflow-api.json) e [documentação da API](docs/openapi/README.md).
-
----
-
-## Stack
-
-Java 21 e Spring Boot; Angular; PostgreSQL; Docker; Kubernetes; Terraform; GitHub Actions; OpenAPI/Swagger;
-JUnit, SonarQube e Snyk.
-
----
-
-## Arquitetura
-
-### Backend — Clean Architecture
-
-O AutoFlow é um monólito Spring Boot organizado segundo a Clean Architecture. O backend possui as camadas
-`presentation`, `application`, `domain`, `infrastructure` e `config`.
-
-A direção principal das dependências é `presentation → application → domain`. A camada `infrastructure` implementa
-detalhes técnicos e as portas definidas pela `application`, enquanto `config` realiza a composição da aplicação.
-
-Os detalhes da organização e das regras arquiteturais estão em [`docs/architecture.md`](docs/architecture.md).
-
-### Frontend — Angular Standalone + Signals
-
-O frontend usa componentes standalone, lazy loading, Signals, guards funcionais e interceptors JWT. Para rotas,
-estrutura e instruções específicas, consulte o [README do frontend](frontend/README.md).
-
----
-
-## Funcionalidades
-
-O sistema oferece cadastro de clientes, veículos, serviços e peças; abertura e execução de ordens de serviço;
-orçamentos com PDF e aprovação autenticada ou pública; reparos adicionais; notificações por e-mail; e área do cliente.
-
----
-
-## Dados de demonstração
-
-As migrations de desenvolvimento incluem dados para avaliação local. Consulte a configuração local e as migrations para obter os dados de teste. Não publique CPF/CNPJ ou senhas e não use dados de demonstração em produção.
-
----
-
-## Principais Fluxos
-
-O sistema cobre o ciclo completo da OS, geração e aprovação de orçamentos, download de PDF, reparos adicionais e
-acompanhamento público por token. Consulte os [diagramas de sequência](docs/diagramas-sequencia/diagrama-sequencia.md)
-e o [fluxo de orçamento público](docs/fluxo-orcamento-publico.md) para os detalhes.
-
-Para rotas, estrutura e instruções específicas da aplicação web, consulte o [README do frontend](frontend/README.md).
-
----
-
-## Execução local
-
-Pré-requisitos: Java 21, Maven, Node.js 20, npm, PostgreSQL e, opcionalmente, Docker. Os detalhes de cada aplicação
-estão nos READMEs do [backend](backend/README.md) e do [frontend](frontend/README.md).
+Requisitos: Java 21, Maven, Node.js 20+, npm 10+ e PostgreSQL. Para subir a stack Compose, configure um `.env` local
+com os valores necessários à [aplicação e ao banco local](docs/variables-and-secrets.md) e execute:
 
 ```bash
-# backend
+docker compose up -d --build
+```
+
+Sem Compose, inicie o backend com PostgreSQL configurado e, em outro terminal, o frontend:
+
+```bash
 cd backend
 mvn spring-boot:run
 
-# frontend, em outro terminal
+# Em outro terminal
 cd frontend
-npm install
+npm ci
 npm start
 ```
 
-O backend fica disponível em `http://localhost:8081` e o frontend em `http://localhost:4200`.
+O backend local usa `http://localhost:8081`; o frontend usa `http://localhost:4200`. Testes e comandos adicionais estão
+nos READMEs de [backend](backend/README.md), [frontend](frontend/README.md) e no [guia de qualidade](docs/testing-and-quality.md).
 
-## Docker Compose
+Os [Dockerfiles do backend](backend/Dockerfile) e [frontend](frontend/Dockerfile) são usados para build das imagens.
+O CI constrói as imagens sem publicá-las.
 
-Na raiz do repositório, suba a stack completa com:
+Para Kubernetes local, use Minikube, Kind ou Kubernetes do Docker Desktop. O perfil e o exemplo de Secret sem credenciais
+estão em [`k8s-local/`](k8s-local/); não reutilize valores locais em AWS.
 
-```bash
-docker compose up -d
-```
+## API, autenticação e banco
 
-## Kubernetes local 
+- [OpenAPI versionado e guia da API](docs/openapi/README.md)
+- [Especificação OpenAPI JSON](docs/openapi/autoflow-api.json)
+- [Coleção Postman de autenticação CPF/JWT](backend/postman/autoflow-serverless-auth.postman_collection.json)
+- Swagger local: <http://localhost:8081/swagger-ui.html>; OpenAPI em <http://localhost:8081/v3/api-docs>.
+- Diagrama ER e justificativa PostgreSQL: [autoflow-db](https://github.com/autoflow-fiap/autoflow-db/blob/develop/docs/diagrama-er.md)
+  e [RFC-001](https://github.com/autoflow-fiap/autoflow-db/blob/develop/docs/RFC-001.md).
 
-Os manifestos Kubernetes da entrega em [k8s/](k8s/) e do perfil local em [k8s-local/](k8s-local/) estão versionados.
-Manifests `secret.yaml` com valores não são versionados; em um clone novo, crie o Secret local a partir do modelo sem
-credenciais e preencha-o somente com valores locais. É necessário ter Minikube, Kind ou Kubernetes habilitado no Docker
-Desktop:
+O login serverless recebe CPF/CNPJ e senha no API Gateway, que invoca a Lambda. Rotas de negócio usam Bearer JWT; o
+backend valida assinatura, claims, estado e perfil atual do usuário. O contrato e os cenários de teste estão no guia
+OpenAPI e na [sequência de autenticação](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/api-gateway/arquitetura.md).
 
-Os manifests de `k8s-local/` são para desenvolvimento local. Nos clusters dedicados de homologação e produção, os
-Services NodePort privados são alcançáveis pelo ALB interno integrado ao API Gateway. Após reset do Learner Lab,
-reexecute as pipelines CI/CD para provisionar novamente os recursos do ambiente.
+O backend envia notificações de ordens de serviço por SMTP.
 
-```bash
-cd k8s-local
-cp secret.yaml.example secret.yaml
-# Preencha localmente os campos POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD,
-# SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD, JWT_SECRET,
-# MAIL_PASSWORD e APP_PUBLIC_TOKEN_SECRET antes de aplicar.
-minikube start
-kubectl apply -f configmap.yaml
-kubectl apply -f secret.yaml
-kubectl apply -f postgresql-service.yaml
-kubectl apply -f postgresql-statefulset.yaml
-kubectl apply -f .
-kubectl get pods
-```
+## Implantação e CI/CD
 
-O frontend fica disponível em `http://localhost:30180` e o backend em `http://localhost:30080`.
+`develop` corresponde a `homolog`; `main`, a `production`. A ordem de dependências é VPC/EKS, RDS, Lambda, API Gateway,
+aplicação e New Relic. Os workflows são independentes; consulte [operação de CI/CD](.github/CI-CD-AWS.md) e
+[Variables e Secrets](docs/variables-and-secrets.md).
 
----
+- `ci.yml` valida Pull Requests para `develop`/`main` e pushes para `develop`, `main` e `feature/**`: testes, builds,
+  análise estática/segurança e Terraform sem Apply AWS.
+- `pipeline.yml` recebe `push` em `develop`/`main`. O caminho automático exige a Repository Variable correspondente
+  (`AUTO_CD_ENABLED_HOMOLOG` ou `AUTO_CD_ENABLED_PRODUCTION`) igual a `true` e sucesso da CI para o mesmo SHA; executa
+  Plan, não publica imagens nem aplica recursos.
+- No `workflow_dispatch`, `apply=false` executa Plan. `apply=true` publica imagens com tag SHA, gera Plan e solicita
+  aprovação separada para Apply e rollout. Smoke tests são executados após o Apply ou por dispatch com
+  `smoke_tests_only=true`.
+- Os smoke tests usam o Environment validado pelo gate (`homolog` para `develop`, `production` para `main`), inclusive
+  na execução isolada. A proteção configurada para esse Environment também se aplica ao job.
+- Apply exige `TERRAFORM_APPLY_APPROVAL_CONFIGURED=true` e usa o GitHub Environment selecionado (`homolog` ou
+  `production`); configure Required reviewers e restrições de branch nesses Environments. `main` exige proteção de branch.
+- `pr-automatico.yaml` cria Pull Request para `develop` conforme seus filtros.
 
-## Terraform na AWS
+Configure proteção de branch em `develop` e `main` para exigir Pull Request e checks da CI.
 
-O código Terraform de deploy da aplicação está em [infra/](infra/). A plataforma EKS, o API Gateway HTTP, o VPC Link,
-o ALB interno, IAM e os recursos compartilhados pertencem ao repositório
-[autoflow-infra](https://github.com/autoflow-fiap/autoflow-infra). Este repositório gerencia Deployments, Services
-internos/NodePort privados e a configuração Nginx do frontend.
+O Terraform declara o HPA do backend entre 1 e 3 réplicas, com alvo médio de CPU de 50%; o cluster deve expor
+`metrics.k8s.io` para o autoscaling funcionar. O agente APM Java usa `ENABLE_NEWRELIC_APM`; monitoramento Kubernetes,
+dashboards, alertas e Synthetic são gerenciados pelo root `autoflow-infra` conforme suas Variables.
 
-O root `infra/` usa backend S3 e recebe bucket e keys pelo GitHub Environment selecionado. `develop` implanta em
-`homolog`; `main` implanta em `production`. Cada ambiente aponta para a conta AWS, bucket e credenciais próprios.
-As keys começam por `homolog/` ou `production/` conforme o Environment e têm sufixos definidos externamente. Quando os
-ambientes usam a mesma conta e bucket, suas keys precisam ser distintas. A aplicação e o RDS sempre usam keys diferentes. O workflow verifica a identidade AWS esperada, a
-região, o owner do bucket e a separação das keys antes de inicializar Terraform.
+## Documentação relacionada
 
-| Branch | GitHub Environment | Cluster EKS esperado | API Gateway HTTP esperada |
-|---|---|---|---|
-| `develop` | `homolog` | `eks-autoflow` | `autoflow-homolog` |
-| `main` | `production` | `eks-autoflow-production` | `autoflow-production` |
-
-O workflow seleciona o recurso com o nome exato do ambiente, mesmo quando a conta contém outros clusters ou APIs. O
-root `infra/` recebe `AWS_TERRAFORM_STATE_BUCKET`, `AWS_TF_STATE_KEY`, `AWS_RDS_STATE_KEY`,
-`API_GATEWAY_CORS_ORIGINS`, região, cluster e endpoint HTTPS da API. Credenciais, account ID, endpoints e conteúdo
-de Terraform State permanecem fora do repositório. Consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md)
-para a configuração dos Environments e [Operação de CI/CD](.github/CI-CD-AWS.md) para a ordem de provisionamento.
-O workflow deriva `TF_VAR_aws_allowed_account_ids` de `AWS_EXPECTED_ACCOUNT_ID`; essa allowlist restringe o backend S3 e o
-`terraform_remote_state` de RDS. As verificações de ownership continuam usando `--expected-bucket-owner` nas chamadas
-AWS CLI compatíveis, sem incluir esse argumento na configuração Terraform. O backend mantém `encrypt=true` e
-`use_lockfile=true`.
-Não há Ingress, plugin ou upstream Kong na arquitetura de aplicação.
-
-Para a configuração por nome de GitHub Actions, Terraform, runtime e Kubernetes, consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md) e o [histórico](docs/variables-changelog.md). Esta seção descreve a operação do Secret Kubernetes; a documentação operacional do pipeline permanece em [CI-CD-AWS.md](.github/CI-CD-AWS.md).
-
-### Escalabilidade declarada do backend
-
-O Terraform da aplicação gerencia o manifesto [`k8s/hpa.yaml`](k8s/hpa.yaml) como `kubectl_manifest.backend_hpa`, após o Deployment do backend. O HPA solicita de 1 a 3 réplicas e CPU média-alvo de 50%. Em `kubectl_manifest.backend_deployment`, `ignore_fields = ["spec.replicas"]` deixa esse campo sob controle do HPA, sem que o Terraform reverta a quantidade de réplicas em cada aplicação.
-
-A configuração do HPA está integrada ao Terraform e é provisionável pela pipeline da aplicação. Após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar novamente os recursos do ambiente.
-
-O Metrics Server do cluster de produção não foi confirmado. Verifique se a API `metrics.k8s.io` está disponível no EKS
-real antes de aceitar a operação do HPA. Se estiver ausente, o provisionamento deve fornecer uma instalação segura,
-declarativa e compatível; não copie `k8s-local/metrics-server.yaml`, que contém opções TLS inseguras.
-
-## Segredos Kubernetes da aplicação
-
-O Secret `autoflow-secrets`, no namespace `default`, é consumido somente pelo backend; o frontend não o utiliza. Em homologação e produção, a pipeline mapeia os Environment Secrets para esse Secret usando `scripts/apply_k8s_secret.py`, que envia o manifesto por stdin sem gravá-lo em arquivo ou log e reinicia o backend. Consulte o [catálogo de variables e secrets](docs/variables-and-secrets.md) e [Operação de CI/CD](.github/CI-CD-AWS.md) para os nomes e etapas do fluxo.
-
-Para desenvolvimento local, use `k8s-local/secret.yaml.example` e mantenha os valores somente na máquina. Manifests Secret preenchidos foram removidos de `develop`; `k8s/secret.yaml` não é necessário para o deploy nos clusters dedicados. A remoção ainda precisa chegar a `main` por Pull Request aprovado antes de habilitar produção.
-
-Restrinja o RBAC de leitura e escrita de Secrets, confirme a proteção KMS do cluster e rotacione credenciais que tenham sido versionadas ou persistidas em state. Após reset do Learner Lab, reexecute as pipelines CI/CD para provisionar o Secret e os workloads.
-
----
-
-## API e OpenAPI
-
-Para demonstrar o login serverless por CPF/CNPJ e o uso do token em rota protegida, consulte a
-[demonstração ponta a ponta](docs/openapi/README.md#demonstração-ponta-a-ponta-da-autenticação-serverless) e importe a
-[coleção Postman](backend/postman/autoflow-serverless-auth.postman_collection.json).
-
-O [contrato OpenAPI versionado](docs/openapi/autoflow-api.json) é o artefato distribuível da API; a [documentação da
-API](docs/openapi/README.md) detalha seu uso. Com o backend em execução, acesse [`http://localhost:8081/swagger-ui.html`](http://localhost:8081/swagger-ui.html)
-ou [`http://localhost:8081/v3/api-docs`](http://localhost:8081/v3/api-docs).
-
----
-
-## Segurança
-
-O acesso às APIs de negócio é controlado por JWT e perfis (`ADMIN`, `ATENDENTE`, `MECANICO` e `CLIENTE`), com endpoints públicos e privados segregados. O frontend envia login ao API Gateway, que invoca a Lambda nativamente; as rotas de negócio seguem pelo VPC Link e ALB interno até o backend no EKS. Não são mantidos credenciais, tokens ou valores reais de ambiente neste README.
-
----
-
-## Qualidade de Código
-
-Testes automatizados e análises de qualidade e segurança usam JUnit, SonarQube, JaCoCo e Snyk.
-
-## Fluxo do CI/CD
-
-O workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) executa automaticamente CI em Pull Requests para
-`develop`/`main` e pushes para `develop`, `main` e `feature/**`: testes Java/Angular/Python, análise SonarQube/Snyk,
-build Docker sem publicação e validação Terraform estática. A CI não configura credenciais AWS nem executa Plan, Apply,
-publicação de imagens ou rollout.
-
-O workflow [.github/workflows/pipeline.yml](.github/workflows/pipeline.yml) é CD manual, disponível apenas em
-`workflow_dispatch` para `develop` → `homolog` ou `main` → `production`. Com `apply=false`, executa os pré-requisitos e
-Plan sem publicar imagens nem aplicar recursos. Com `apply=true`, publica as imagens imutáveis pelo SHA sob o Environment
-protegido, executa Plan e só então apresenta o job de Apply, que exige autorização e aprovação independentes no GitHub
-Environment. O Plan usa o artifact criptografado do mesmo commit; o Apply mantém os gates e os guards de destruição e
-substituição. O deploy inclui atualização do Secret Kubernetes, rollout de backend/frontend e, em homologação, smoke
-tests do API Gateway. Em produção, não são executados smoke tests com credenciais sintéticas de homologação.
-
-O provisionamento cross-repositório segue esta ordem: VPC/EKS, RDS, Lambda/autenticação, API Gateway e aplicação. A
-aplicação depende do API Gateway para configurar a origem pública; o backend executa as migrations Flyway existentes
-ao iniciar. Se New Relic APM estiver habilitado no Environment, a pipeline sincroniza a License Key do GitHub Secrets
-com AWS Secrets Manager e Kubernetes sem registrá-la em logs, Terraform State ou artifacts.
-
-Para habilitar a produção, configure o GitHub Environment `production` restrito a `main`, com credenciais, Variables,
-Secrets, States e Required reviewers próprios. A remoção dos manifests de Secrets já presente em `develop` deve chegar
-a `main` por Pull Request aprovado antes de habilitar o deploy de produção. A documentação de CI/CD descreve os
-pré-requisitos externos e as pendências que só podem ser confirmadas no cluster real.
-
-```mermaid
-flowchart TD
-  A[Push ou PR para branches CI] --> B[CI: testes, builds, segurança e Terraform estático]
-  B --> C[Build Docker sem publicação]
-  D[Dispatch em develop ou main, apply=false] --> P[Plan no Environment selecionado]
-  P --> F[Artifact Terraform criptografado]
-  E[Dispatch em develop ou main, apply=true] --> U[Aprovação do Environment para publicar imagens]
-  U --> I[Publicação Docker Hub com tags SHA]
-  I --> Q[Plan no Environment selecionado]
-  Q --> G{Aprovação independente do Apply}
-  G -->|Aprovado e gate true| T[Apply do plan e rollout]
-  G -->|Rejeitado ou sem autorização| X[Apply bloqueado]
-```
+- [Arquitetura e limites das camadas](docs/architecture.md)
+- [Diagramas de sequência](docs/diagramas-sequencia/diagrama-sequencia.md)
+- [Fluxo de orçamento público](docs/fluxo-orcamento-publico.md)
+- [ADR-001 — migração para Clean Architecture](docs/adr/ADR-001-sequencia-migracao-clean-architecture.md)
+- [ADR-002 — Kubernetes e Terraform](docs/adr/ADR-002-adocao-kubernetes-terraform.md)
+- [Recursos New Relic declarados pela infraestrutura](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/infra/newrelic/README.md)
