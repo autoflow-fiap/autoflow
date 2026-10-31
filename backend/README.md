@@ -106,20 +106,10 @@ Endpoints públicos de orçamento não exigem JWT, mas exigem `token` na query s
 Os detalhes de validade, auditoria e efeitos na OS estão em [
 `fluxo-orcamento-publico.md`](../docs/fluxo-orcamento-publico.md).
 
-## Contas do seed
+## Dados de demonstração
 
-Para a demonstracao local da pos-graduacao, o seed cria contas com uma senha definida nas migrations. Consulte a configuracao local aprovada para obter credenciais de teste; nao mantenha senhas literais nesta documentacao:
-
-| CPF/CNPJ      | E-mail                   | Perfil      |
-|---------------|--------------------------|-------------|
-| `52998224725` | `admin@autoflow.com`     | `ADMIN`     |
-| `16899535009` | `atendente@autoflow.com` | `ATENDENTE` |
-| `93541134780` | `mecanico1@autoflow.com` | `MECANICO`  |
-| `15350946056` | `mecanico2@autoflow.com` | `MECANICO`  |
-| `11144477735` | `cliente@autoflow.com`   | `CLIENTE`   |
-
-As migracoes `V36` e `V40` tambem criam contas complementares; a lista completa esta
-no [README principal](../README.md). Sao credenciais de demonstracao local e nao devem ser usadas em producao.
+As migrations de desenvolvimento criam usuários sintéticos para testes locais. Os documentos, e-mails e senhas de seed
+não são reproduzidos nesta documentação; consulte as fixtures locais autorizadas e não use esses dados em produção.
 
 ## Validações e testes
 

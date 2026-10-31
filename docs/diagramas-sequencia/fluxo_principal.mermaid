@@ -5,72 +5,38 @@ config:
 sequenceDiagram
     autonumber
     actor Atendente
-    actor Mecanico
     participant Frontend as Frontend Angular
-    participant Auth as JWT/Spring Security
-    participant OSController as Controllers de OrdemServico
-    participant OSUseCases as Casos de uso da OS
-    participant ClienteUseCases as Casos de uso de cliente
-    participant VeiculoUseCases as Casos de uso de veículo
-    participant OrcamentoFactory as OrcamentoFactory
-    participant Publicacao as OrcamentoPublicacaoAdapter
-    participant Notificacao as OrcamentoNotificacaoAdapter
-    participant Email as EmailNotificacaoGateway
-    participant DB as PostgreSQL
+    participant Gateway as API Gateway HTTP API v2
+    participant ALB as ALB interno via VPC Link
+    participant Backend as Backend Spring Boot no EKS
+    participant Security as Spring Security / JWT
+    participant OSController as Controller de Ordem de Serviço
+    participant OSUseCases as Caso de uso de abertura da OS
+    participant Cliente as Caso de uso de cliente
+    participant Veiculo as Caso de uso de veículo
+    participant DB as RDS PostgreSQL
 
-    Atendente->>Frontend: Informa cliente, veiculo e servicos
-    Frontend->>Auth: Envia JWT
-    Auth-->>Frontend: Usuario autorizado
-    Frontend->>OSController: POST /ordens-servico
-    OSController ->> OSUseCases: criar(cpfCnpj, veiculo, servicos)
-    OSUseCases ->> ClienteUseCases: buscarPorCpfCnpj(cpfCnpj)
-    ClienteUseCases ->> DB: Consulta cliente via gateway
-    DB -->> ClienteUseCases: Cliente encontrado
-    OSUseCases ->> VeiculoUseCases: buscarOuCadastrarPorPlacaParaCliente()
-    VeiculoUseCases ->> DB: Consulta/cadastra veículo via gateway
-    DB -->> VeiculoUseCases: Veículo associado
-    OSUseCases ->> DB: Salva OS e histórico via gateway
-    DB -->> OSUseCases: OS criada
-    OSUseCases -->> OSController: OrdemServicoResponse
-    OSController-->>Frontend: 201 OrdemServicoResponse
-
-    Atendente->>Frontend: Atribui mecanico
-    Frontend->>OSController: PATCH /ordens-servico/{numeroOs}/mecanico
-    OSController ->> OSUseCases: atribuirMecanico(numeroOs, mecanicoId/email)
-    OSUseCases ->> DB: Atualiza diagnóstico.mecânico via gateway
-    DB -->> OSUseCases: OS atualizada
-    OSUseCases -->> OSController: OrdemServicoResponse
-    OSController-->>Frontend: 202 OrdemServicoResponse
-
-    Mecanico->>Frontend: Inicia diagnostico
-    Frontend->>OSController: PATCH /ordens-servico/{numeroOs}/diagnostico/iniciar
-    OSController ->> OSUseCases: iniciarDiagnostico(numeroOs, emailUsuario)
-    OSUseCases ->> DB: Atualiza status para EM_DIAGNOSTICO e registra histórico
-    DB -->> OSUseCases: OS atualizada
-    OSUseCases -->> OSController: OrdemServicoResponse
-    OSController-->>Frontend: 202 OrdemServicoResponse
-
-    Mecanico->>Frontend: Registra laudo e itens necessarios
-    Frontend->>OSController: PATCH /diagnostico/laudo
-    OSController ->> OSUseCases: registrarLaudo(numeroOs, emailUsuario, laudo)
-    OSUseCases ->> DB: Salva laudo via gateway
-    Frontend->>OSController: PATCH /servicos/{servicoId}/itens-necessarios
-    OSController ->> OSUseCases: registrarItemNecessario(...)
-    OSUseCases ->> DB: Salva peças/insumos do serviço via gateway
-
-    Mecanico->>Frontend: Finaliza diagnostico
-    Frontend->>OSController: PATCH /ordens-servico/{numeroOs}/diagnostico/finalizar
-    OSController ->> OSUseCases: finalizarDiagnostico(numeroOs, emailUsuario)
-    OSUseCases ->> DB: Busca OS via gateway
-    OSUseCases ->> OrcamentoFactory: criarPrincipalDisponivel(OS, versao, data)
-    OrcamentoFactory -->> OSUseCases: Orçamento DISPONIVEL
-    OSUseCases ->> DB: Salva orçamento via gateway
-    OSUseCases ->> Publicacao: publicar(orcamentoId)
-    Publicacao ->> DB: Salva hash e expiracao do token publico
-    Publicacao -->> OSUseCases: URL do PDF e página de decisão
-    OSUseCases ->> Notificacao: enviar links do PDF e da decisão ao cliente
-    Notificacao->>Email: enviar(mensagem)
-    Email-->>Notificacao: E-mail enviado ou erro tratado em log
-    OSUseCases ->> DB: Atualiza OS para AGUARDANDO_APROVACAO e registra histórico
-    OSUseCases -->> OSController: FinalizarDiagnosticoResponse
-    OSController-->>Frontend: 202 OS + orcamentoId + publicUrl
+    Note over Atendente,Frontend: O JWT foi obtido previamente pelo fluxo de autenticação CPF/CNPJ.
+    Atendente->>Frontend: Informa cliente, veículo e serviços
+    Frontend->>Gateway: POST /api/ordens-servico + Bearer JWT
+    Gateway->>ALB: HTTP_PROXY pelo VPC Link
+    ALB->>Backend: Encaminha ao serviço Spring Boot
+    Backend->>Security: Autenticar e autorizar requisição
+    Security->>DB: Carregar usuário/perfil atual pelo subject do JWT
+    DB-->>Security: Usuário e perfil
+    Security-->>Backend: Identidade autorizada
+    Backend->>OSController: Requisição autenticada
+    OSController->>OSUseCases: criar(cpfCnpj, veículo, serviços)
+    OSUseCases->>Cliente: buscarPorCpfCnpj(cpfCnpj)
+    Cliente->>DB: Consultar cliente
+    DB-->>Cliente: Cliente encontrado
+    OSUseCases->>Veiculo: buscar ou associar veículo ao cliente
+    Veiculo->>DB: Consultar/cadastrar veículo
+    DB-->>Veiculo: Veículo associado
+    OSUseCases->>DB: Salvar OS, serviços solicitados e histórico
+    DB-->>OSUseCases: OS criada
+    OSUseCases-->>OSController: OrdemServicoResponse
+    OSController-->>Backend: Resposta HTTP 201
+    Backend-->>ALB: Resposta
+    ALB-->>Gateway: Resposta
+    Gateway-->>Frontend: HTTP 201 — OrdemServicoResponse

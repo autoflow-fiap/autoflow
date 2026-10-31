@@ -27,6 +27,19 @@ o Apply continuam exclusivos de uma execução manual com `apply=true`, aprovaç
 guards de Apply existentes, incluindo `TERRAFORM_APPLY_APPROVAL_CONFIGURED=true`. A aprovação do Plan, inclusive de um
 Plan automático, não autoriza Apply. Os controles de operações destrutivas permanecem separados.
 
+## Smoke tests
+
+O job de smoke tests é exclusivo de `workflow_dispatch`. Após o PR #113, usa o Environment validado pelo gate
+(`needs.gate.outputs.environment`) tanto para a execução isolada quanto após Apply: `homolog` para `develop` e
+`production` para `main`. Assim, os Secrets e as Variables usados pelo teste vêm do mesmo ambiente do deploy; a
+configuração efetiva desses valores no GitHub não é comprovada pelo workflow versionado.
+
+## Estado verificado em 31/10/2026
+
+`AUTO_CD_ENABLED` estava ausente e `TERRAFORM_APPLY_APPROVAL_CONFIGURED=false` em `homolog` e `production`. A [AutoFlow CI](https://github.com/autoflow-fiap/autoflow/actions/runs/41163079183)
+passou; a [Pipeline](https://github.com/autoflow-fiap/autoflow/actions/runs/41163079185) falhou no gate antes do Plan.
+Regrasets com PR/checks, Required reviewers e branch policies estavam ativos. Não há evidência de Apply da aplicação nesta revisão.
+
 ## Validação
 
 Os testes locais verificam a validação da origem do evento, do branch/SHA e da CI correspondente, além dos casos de

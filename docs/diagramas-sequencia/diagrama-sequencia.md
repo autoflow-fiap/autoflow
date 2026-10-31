@@ -7,7 +7,7 @@ adapters e PostgreSQL. Os diagramas complementam o Swagger e não substituem o c
 
 | Fluxo                             | Arquivo                                                                                  | Escopo                                        |
 |-----------------------------------|------------------------------------------------------------------------------------------|-----------------------------------------------|
-| Ciclo principal da OS             | [fluxo_principal.mermaid](fluxo_principal.mermaid)                                       | Abertura, atribuição, diagnóstico e orçamento |
+| Abertura da OS                   | [fluxo_principal.mermaid](fluxo_principal.mermaid)                                       | JWT, API Gateway, VPC Link, ALB, backend e persistência |
 | Aprovação/recusa autenticada      | [aprovacao_recusa_orcamento.mermaid](aprovacao_recusa_orcamento.mermaid)                 | Decisão do cliente com JWT                    |
 | Aprovação/recusa pública          | [aprovacao_recusa_orcamento_publico.mermaid](aprovacao_recusa_orcamento_publico.mermaid) | Token, consulta e decisão sem login           |
 | Execução e reparo adicional       | [execucao_os_reparo_adicional.mermaid](execucao_os_reparo_adicional.mermaid)             | Estoque, execução e orçamento complementar    |
