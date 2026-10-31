@@ -88,6 +88,57 @@ class CiCdWorkflowMatrixTests(unittest.TestCase):
         self.assertIn("github.event_name == 'workflow_dispatch'", smoke)
         self.assertNotIn("github.event_name == 'push'", smoke)
 
+    def test_smoke_tests_use_the_environment_validated_for_each_branch(self):
+        content = (WORKFLOWS / "pipeline.yml").read_text(encoding="utf-8")
+        smoke = section(content, "smoke-tests")
+
+        self.assertIn("needs: [gate, deploy-apply]", smoke)
+        self.assertIn("environment: ${{ needs.gate.outputs.environment }}", smoke)
+        self.assertIn("GITHUB_DEPLOYMENT_ENVIRONMENT: ${{ needs.gate.outputs.environment }}", smoke)
+        self.assertIn("inputs.smoke_tests_only", smoke)
+        self.assertIn("needs.deploy-apply.result == 'success'", smoke)
+        self.assertIn("github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'", smoke)
+        self.assertIn("github.ref != 'refs/heads/main' || github.ref_protected", smoke)
+        self.assertIn("autoflow-${GITHUB_DEPLOYMENT_ENVIRONMENT}", smoke)
+        self.assertNotIn("autoflow-homolog", smoke)
+
+    def test_smoke_tests_validate_injected_environment_values_without_admin_api(self):
+        content = (WORKFLOWS / "pipeline.yml").read_text(encoding="utf-8")
+        smoke = section(content, "smoke-tests")
+        configuration_check = smoke.split("id: environment-config", 1)[1].split("- uses: aws-actions/configure-aws-credentials@v4", 1)[0]
+
+        self.assertNotIn("actions: read", smoke)
+        self.assertNotIn("GH_TOKEN", smoke)
+        self.assertNotIn("gh api", smoke)
+        self.assertNotIn("environments/$GITHUB_DEPLOYMENT_ENVIRONMENT", smoke)
+        self.assertIn("API_GATEWAY_CORS_ORIGINS: ${{ vars.API_GATEWAY_CORS_ORIGINS }}", smoke)
+        self.assertIn("AWS_REGION: ${{ vars.AWS_REGION }}", smoke)
+        self.assertIn("AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}", smoke)
+        for secret in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
+            self.assertIn(f"{secret}: ${{{{ secrets.{secret} }}}}", configuration_check)
+        self.assertIn('[[ -n "${!name}" ]]', configuration_check)
+        self.assertIn("API_GATEWAY_CORS_ORIGINS AWS_REGION AWS_EXPECTED_ACCOUNT_ID AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN", configuration_check)
+        self.assertLess(smoke.index("id: environment-config"), smoke.index("aws-actions/configure-aws-credentials@v4"))
+        self.assertIn("python scripts/verify_aws_account.py", smoke)
+
+    def test_optional_smoke_credentials_do_not_fall_back_to_repository_secrets_in_production(self):
+        content = (WORKFLOWS / "pipeline.yml").read_text(encoding="utf-8")
+        smoke = section(content, "smoke-tests")
+        configuration_check = smoke.split("id: environment-config", 1)[1].split("- uses: aws-actions/configure-aws-credentials@v4", 1)[0]
+
+        self.assertIn("AUTOFLOW_HOMOLOG_TEST_CPF_CNPJ", configuration_check)
+        self.assertIn("AUTOFLOW_HOMOLOG_TEST_PASSWORD", configuration_check)
+        self.assertIn("AUTOFLOW_PRODUCTION_TEST_CPF_CNPJ", configuration_check)
+        self.assertIn("AUTOFLOW_PRODUCTION_TEST_PASSWORD", configuration_check)
+        self.assertIn("REPOSITORY_TEST_CPF_CNPJ: ${{ env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_TEST_CPF_CNPJ || '' }}", configuration_check)
+        self.assertIn("REPOSITORY_TEST_PASSWORD: ${{ env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog' && secrets.AUTOFLOW_TEST_PASSWORD || '' }}", configuration_check)
+        self.assertIn("test_credentials_source=environment", configuration_check)
+        self.assertIn("test_credentials_source=repository", configuration_check)
+        self.assertIn("test_credentials_source=none", configuration_check)
+        self.assertIn("Os Secrets de teste do Environment selecionado precisam ser fornecidos juntos.", configuration_check)
+        self.assertIn("Credenciais globais de teste não podem ser usadas fora de homolog.", configuration_check)
+        self.assertIn("steps.environment-config.outputs.test_credentials_source == 'repository' && env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog'", smoke)
+
 
 if __name__ == "__main__":
     unittest.main()
