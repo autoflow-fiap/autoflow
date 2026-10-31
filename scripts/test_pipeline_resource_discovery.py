@@ -82,17 +82,51 @@ class PipelineResourceDiscoveryTests(unittest.TestCase):
         with self.assertRaises(discovery.DiscoveryError):
             discovery.validate_state_configuration("homolog", "state-bucket", "homolog/app/../state", "homolog/rds.custom")
 
-    def test_only_workflow_dispatch_on_the_mapped_branch_can_select_deploy_environment(self):
-        for event, ref, environment in (
-            ("pull_request", "refs/pull/12/merge", "homolog"),
-            ("push", "refs/heads/feature/change", "homolog"),
-            ("push", "refs/heads/develop", "homolog"),
-            ("push", "refs/heads/main", "production"),
-            ("workflow_dispatch", "refs/heads/feat/change", "production"),
-            ("workflow_dispatch", "refs/heads/main", "homolog"),
+    def test_push_selects_environment_only_after_automatic_plan_gate_authorizes_it(self):
+        for ref, environment, protected in (
+            ("refs/heads/develop", "homolog", False),
+            ("refs/heads/main", "production", True),
+        ):
+            with self.subTest(ref=ref, environment=environment):
+                self.assertEqual(
+                    discovery.validate_context(
+                        "push", ref, environment, auto_cd_enabled=True, branch_protected=protected
+                    ),
+                    environment,
+                )
+
+    def test_workflow_dispatch_preserves_mapped_branch_and_environment_rules(self):
+        for ref, environment, protected in (
+            ("refs/heads/develop", "homolog", False),
+            ("refs/heads/main", "production", True),
+        ):
+            with self.subTest(ref=ref, environment=environment):
+                self.assertEqual(
+                    discovery.validate_context(
+                        "workflow_dispatch", ref, environment, branch_protected=protected
+                    ),
+                    environment,
+                )
+
+    def test_pull_request_unprotected_main_feature_push_and_unauthorized_push_are_blocked(self):
+        for event, ref, environment, auto_cd_enabled, branch_protected in (
+            ("pull_request", "refs/pull/12/merge", "homolog", True, False),
+            ("schedule", "refs/heads/develop", "homolog", True, False),
+            ("push", "refs/heads/feature/change", "homolog", True, False),
+            ("push", "refs/heads/develop", "homolog", False, False),
+            ("push", "refs/heads/main", "production", False, True),
+            ("push", "refs/heads/main", "production", True, False),
+            ("workflow_dispatch", "refs/heads/feat/change", "production", False, False),
+            ("workflow_dispatch", "refs/heads/main", "homolog", False, True),
         ):
             with self.subTest(event=event, ref=ref, environment=environment), self.assertRaises(discovery.DiscoveryError):
-                discovery.validate_context(event, ref, environment)
+                discovery.validate_context(
+                    event,
+                    ref,
+                    environment,
+                    auto_cd_enabled=auto_cd_enabled,
+                    branch_protected=branch_protected,
+                )
 
     def test_apply_is_limited_to_explicit_dispatch_on_develop_and_main(self):
         apply = WORKFLOW.split("  deploy-apply:", 1)[1].split("  smoke-tests:", 1)[0]
@@ -115,6 +149,8 @@ class PipelineResourceDiscoveryTests(unittest.TestCase):
         selected_environment = "environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}"
         for job in (plan, apply):
             self.assertIn(selected_environment, job)
+            self.assertIn("AUTO_CD_ENABLED: ${{ needs.gate.outputs.auto_cd_enabled }}", job)
+            self.assertIn("BRANCH_PROTECTED: ${{ github.ref_protected }}", job)
             self.assertIn("AWS_REGION: ${{ vars.AWS_REGION }}", job)
             self.assertIn("TF_STATE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}", job)
             self.assertIn("TF_STATE_KEY: ${{ vars.AWS_TF_STATE_KEY }}", job)
@@ -152,6 +188,19 @@ class PipelineResourceDiscoveryTests(unittest.TestCase):
             self.assertNotIn("/environments/", job)
             self.assertIn("AWS_TF_STATE_KEY: ${{ vars.AWS_TF_STATE_KEY }}", job)
             self.assertIn("AWS_RDS_STATE_KEY: ${{ vars.AWS_RDS_STATE_KEY }}", job)
+
+    def test_lease_bucket_owner_and_credentials_are_checked_before_s3_lease_access(self):
+        plan = WORKFLOW.split("  deploy-plan:", 1)[1].split("\n  deploy-apply:", 1)[0]
+        apply = WORKFLOW.split("  deploy-apply:", 1)[1].split("\n  smoke-tests:", 1)[0]
+        expected_bucket = "EKS_LEASE_BUCKET: ${{ vars.AWS_TERRAFORM_STATE_BUCKET }}"
+        expected_key = "EKS_LEASE_KEY: ci/eks-endpoint-lease-autoflow-${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}.json"
+        owner_check = 'aws s3api head-bucket --bucket "$EKS_LEASE_BUCKET" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID"'
+        for job in (plan, apply):
+            self.assertIn(expected_bucket, job)
+            self.assertIn(expected_key, job)
+            self.assertLess(job.index("aws-actions/configure-aws-credentials@v4"), job.index(owner_check))
+            self.assertLess(job.index(owner_check), job.index("eks_endpoint_access.py reconcile"))
+            self.assertIn("AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}", job)
 
     def test_push_never_authorizes_destructive_terraform_operations(self):
         destructive_setting = "ALLOW_DESTRUCTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false' }}"

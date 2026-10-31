@@ -294,6 +294,8 @@ jobs:
       artifact_name: ${{ steps.package.outputs.artifact_name }}
     env:
       GITHUB_DEPLOYMENT_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
+      AUTO_CD_ENABLED: ${{ needs.gate.outputs.auto_cd_enabled }}
+      BRANCH_PROTECTED: ${{ github.ref_protected }}
       DEPLOY_SHA: ${{ needs.gate.outputs.sha }}
       PLAN_ARTIFACT_NAME: autoflow-terraform-plan-${{ github.run_id }}-${{ github.run_attempt }}
       ALLOW_DESTRUCTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_destructive && 'true' || 'false' }}
@@ -367,6 +369,8 @@ jobs:
         env:
           AWS_EXPECTED_ACCOUNT_ID: ${{ vars.AWS_EXPECTED_ACCOUNT_ID }}
         run: python scripts/verify_aws_account.py
+      - name: Verificar proprietário e acesso ao bucket S3 antes do lease
+        run: aws s3api head-bucket --bucket "$EKS_LEASE_BUCKET" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID"
       - name: Descobrir cluster EKS e endpoint do API Gateway do ambiente
         run: python scripts/pipeline_resource_discovery.py discover
       - name: Validar configuração New Relic do environment
@@ -403,7 +407,6 @@ jobs:
         working-directory: infra
         run: |
           set -euo pipefail
-          aws s3api head-bucket --bucket "$TF_STATE_BUCKET" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID"
           aws s3api head-object --bucket "$TF_STATE_BUCKET" --key "$AWS_RDS_STATE_KEY" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID" >/dev/null
           terraform init -input=false -reconfigure \
             -lockfile=readonly \
@@ -475,6 +478,8 @@ jobs:
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
     env:
       GITHUB_DEPLOYMENT_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'homolog' }}
+      AUTO_CD_ENABLED: ${{ needs.gate.outputs.auto_cd_enabled }}
+      BRANCH_PROTECTED: ${{ github.ref_protected }}
       DEPLOY_SHA: ${{ needs.gate.outputs.sha }}
       PLAN_ARTIFACT_NAME: ${{ needs.deploy-plan.outputs.artifact_name }}
       EXPECTED_PLAN_SHA256: ${{ needs.deploy-plan.outputs.plan_sha256 }}
@@ -553,6 +558,8 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/verify_aws_account.py
+      - name: Verificar proprietário e acesso ao bucket S3 antes do lease
+        run: aws s3api head-bucket --bucket "$EKS_LEASE_BUCKET" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID"
       - name: Descobrir cluster EKS e endpoint do API Gateway do ambiente
         run: python scripts/pipeline_resource_discovery.py discover
       - name: Validar configuração New Relic do environment
@@ -586,7 +593,6 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
-          aws s3api head-bucket --bucket "$TF_STATE_BUCKET" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID"
           aws s3api head-object --bucket "$TF_STATE_BUCKET" --key "$AWS_RDS_STATE_KEY" --expected-bucket-owner "$AWS_EXPECTED_ACCOUNT_ID" >/dev/null
           terraform init -input=false -reconfigure -lockfile=readonly \
             -backend-config="bucket=$TF_STATE_BUCKET" \

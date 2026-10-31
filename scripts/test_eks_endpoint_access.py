@@ -1,11 +1,130 @@
 import unittest
 import subprocess
+import os
+from pathlib import Path
 from unittest.mock import patch
 
 import eks_endpoint_access as endpoint
 
 
+class LeaseStorageTests(unittest.TestCase):
+    def test_missing_lease_object_is_distinguished_from_read_failures(self):
+        missing = subprocess.CompletedProcess(
+            ["aws", "s3api", "get-object"],
+            1,
+            stderr="An error occurred (NoSuchKey) when calling the GetObject operation: missing",
+        )
+        with patch.dict(os.environ, {
+            "AWS_EXPECTED_ACCOUNT_ID": "123456789012",
+            "EKS_LEASE_BUCKET": "state-bucket",
+            "EKS_LEASE_KEY": "ci/eks-endpoint-lease-autoflow-homolog.json",
+        }), patch("eks_endpoint_access.subprocess.run", return_value=missing):
+            self.assertIsNone(endpoint.load_lease())
+
+    def test_lease_read_failures_are_diagnostic_and_do_not_expose_cli_output(self):
+        failures = (
+            (
+                "An error occurred (AccessDenied) when calling the GetObject operation: SECRET_VALUE",
+                "AccessDenied",
+            ),
+            (
+                "An error occurred (ExpiredToken) when calling the GetObject operation: SECRET_VALUE",
+                "ExpiredToken",
+            ),
+            (
+                "An error occurred (SECRET_VALUE) when calling the GetObject operation: denied",
+                "UnknownAWSException",
+            ),
+            ("Could not connect to the endpoint URL: SECRET_VALUE", "rede"),
+        )
+        for stderr, diagnostic in failures:
+            result = subprocess.CompletedProcess(["aws", "s3api", "get-object"], 1, stderr=stderr)
+            with self.subTest(diagnostic=diagnostic), patch.dict(os.environ, {
+                "AWS_EXPECTED_ACCOUNT_ID": "123456789012",
+                "EKS_LEASE_BUCKET": "state-bucket",
+                "EKS_LEASE_KEY": "ci/eks-endpoint-lease-autoflow-homolog.json",
+            }), patch("eks_endpoint_access.subprocess.run", return_value=result):
+                with self.assertRaisesRegex(RuntimeError, diagnostic) as raised:
+                    endpoint.load_lease()
+                self.assertNotIn("SECRET_VALUE", str(raised.exception))
+
+    def test_unknown_lease_document_fails_closed_without_removing_or_overwriting_it(self):
+        def write_unknown_lease(arguments, **_kwargs):
+            Path(arguments[-3]).write_text("{}", encoding="utf-8")
+            return subprocess.CompletedProcess(arguments, 0, stdout="{}")
+
+        with patch.dict(os.environ, {
+            "AWS_EXPECTED_ACCOUNT_ID": "123456789012",
+            "EKS_LEASE_BUCKET": "state-bucket",
+            "EKS_LEASE_KEY": "ci/eks-endpoint-lease-autoflow-homolog.json",
+        }), patch("eks_endpoint_access.subprocess.run", side_effect=write_unknown_lease):
+            with self.assertRaisesRegex(RuntimeError, "desconhecido"):
+                endpoint.load_lease()
+
+    def test_reconcile_does_not_touch_eks_for_unknown_lease_content(self):
+        def write_unknown_lease(arguments, **_kwargs):
+            Path(arguments[-3]).write_text('{"temporary_cidr":"0.0.0.0/0"}', encoding="utf-8")
+            return subprocess.CompletedProcess(arguments, 0, stdout="{}")
+
+        with patch.dict(os.environ, {
+            "AWS_EXPECTED_ACCOUNT_ID": "123456789012",
+            "EKS_LEASE_BUCKET": "state-bucket",
+            "EKS_LEASE_KEY": "ci/eks-endpoint-lease-autoflow-homolog.json",
+        }), patch("eks_endpoint_access.subprocess.run", side_effect=write_unknown_lease), patch.object(endpoint, "aws") as eks:
+            with self.assertRaisesRegex(RuntimeError, "desconhecido"):
+                endpoint.reconcile("eks-autoflow", "us-east-1")
+        eks.assert_not_called()
+
+    def test_valid_lease_is_read_from_expected_bucket_owner(self):
+        expected = {"temporary_cidr": "198.51.100.23/32", "original_cidrs": ["189.6.8.245/32"]}
+
+        def write_lease(arguments, **_kwargs):
+            Path(arguments[-3]).write_text('{"temporary_cidr":"198.51.100.23/32","original_cidrs":["189.6.8.245/32"]}', encoding="utf-8")
+            return subprocess.CompletedProcess(arguments, 0, stdout="{}")
+
+        with patch.dict(os.environ, {
+            "AWS_EXPECTED_ACCOUNT_ID": "123456789012",
+            "EKS_LEASE_BUCKET": "state-bucket",
+            "EKS_LEASE_KEY": "ci/eks-endpoint-lease-autoflow-homolog.json",
+        }), patch("eks_endpoint_access.subprocess.run", side_effect=write_lease) as aws:
+            self.assertEqual(endpoint.load_lease(), expected)
+        command = aws.call_args.args[0]
+        self.assertEqual(command[command.index("--expected-bucket-owner") + 1], "123456789012")
+
+    def test_lease_write_is_conditional_and_existing_lease_is_never_overwritten(self):
+        lease = {"temporary_cidr": "198.51.100.23/32", "original_cidrs": ["189.6.8.245/32"]}
+        conflict = subprocess.CompletedProcess(
+            ["aws", "s3api", "put-object"],
+            1,
+            stderr="An error occurred (PreconditionFailed) when calling the PutObject operation: SECRET_VALUE",
+        )
+        with patch.dict(os.environ, {
+            "AWS_EXPECTED_ACCOUNT_ID": "123456789012",
+            "EKS_LEASE_BUCKET": "state-bucket",
+            "EKS_LEASE_KEY": "ci/eks-endpoint-lease-autoflow-homolog.json",
+        }), patch("eks_endpoint_access.subprocess.run", return_value=conflict) as aws:
+            with self.assertRaisesRegex(RuntimeError, "recusada a sobrescrita") as raised:
+                endpoint.save_lease(lease)
+        self.assertNotIn("SECRET_VALUE", str(raised.exception))
+        command = aws.call_args.args[0]
+        self.assertEqual(command[command.index("--if-none-match") + 1], "*")
+        self.assertIn("--expected-bucket-owner", command)
+
+    def test_lease_configuration_requires_bucket_key_and_expected_account(self):
+        with patch.dict(os.environ, {"EKS_LEASE_BUCKET": "", "EKS_LEASE_KEY": "", "AWS_EXPECTED_ACCOUNT_ID": ""}):
+            with self.assertRaisesRegex(RuntimeError, "EKS_LEASE_BUCKET e EKS_LEASE_KEY"):
+                endpoint.location()
+        with patch.dict(os.environ, {
+            "EKS_LEASE_BUCKET": "state-bucket",
+            "EKS_LEASE_KEY": "ci/lease.json",
+            "AWS_EXPECTED_ACCOUNT_ID": "invalid",
+        }):
+            with self.assertRaisesRegex(RuntimeError, "AWS_EXPECTED_ACCOUNT_ID"):
+                endpoint.location()
+
+
 class EndpointTests(unittest.TestCase):
+
     def test_aws_update_failure_reports_service_error_without_traceback(self):
         self.aws_patch.stop()
         failure = subprocess.CalledProcessError(
@@ -68,11 +187,12 @@ class EndpointTests(unittest.TestCase):
     @patch("eks_endpoint_access.time.sleep")
     def test_cleanup_waits_and_restores_the_original_allowlist(self, _sleep):
         self.cidrs.add("198.51.100.23/32")
+        self.cidrs.add("192.0.2.19/32")
         endpoint.cleanup("eks-autoflow", "us-east-1", {
             "temporary_cidr": "198.51.100.23/32",
             "original_cidrs": ["189.6.8.245/32", "203.0.113.9/32"],
         })
-        self.assertEqual(self.cidrs, {"189.6.8.245/32", "203.0.113.9/32"})
+        self.assertEqual(self.cidrs, {"189.6.8.245/32", "203.0.113.9/32", "192.0.2.19/32"})
         self.assertEqual([args[1] for args in self.calls].count("describe-update"), 1)
 
     def test_missing_permanent_cidr_fails_without_endpoint_update(self):

@@ -36,8 +36,15 @@ def required_environment(name: str) -> str:
     return value
 
 
-def validate_context(event_name: str, git_ref: str, deployment_environment: str) -> str:
-    if event_name != "workflow_dispatch":
+def validate_context(
+    event_name: str,
+    git_ref: str,
+    deployment_environment: str,
+    *,
+    auto_cd_enabled: bool = False,
+    branch_protected: bool = False,
+) -> str:
+    if event_name not in {"push", "workflow_dispatch"}:
         raise DiscoveryError("Descoberta de recursos não é permitida para este evento.")
     if deployment_environment not in ENVIRONMENTS:
         raise DiscoveryError("GitHub Environment de deploy não reconhecido.")
@@ -45,6 +52,10 @@ def validate_context(event_name: str, git_ref: str, deployment_environment: str)
     expected = ENVIRONMENTS[deployment_environment]
     if git_ref != f"refs/heads/{expected['branch']}":
         raise DiscoveryError("Branch e GitHub Environment não correspondem.")
+    if event_name == "push" and not auto_cd_enabled:
+        raise DiscoveryError("O push não foi autorizado pelo gate de CD automático.")
+    if expected["branch"] == "main" and not branch_protected:
+        raise DiscoveryError("A branch main precisa estar protegida para descoberta de recursos.")
     return deployment_environment
 
 
@@ -74,6 +85,8 @@ def validate_configuration() -> tuple[str, str]:
         required_environment("GITHUB_EVENT_NAME"),
         required_environment("GITHUB_REF"),
         required_environment("GITHUB_DEPLOYMENT_ENVIRONMENT"),
+        auto_cd_enabled=os.environ.get("AUTO_CD_ENABLED", "").lower() == "true",
+        branch_protected=os.environ.get("BRANCH_PROTECTED", "").lower() == "true",
     )
     account_id = required_environment("AWS_EXPECTED_ACCOUNT_ID")
     if ACCOUNT_PATTERN.fullmatch(account_id) is None:
