@@ -45,6 +45,17 @@ variable "enable_newrelic_apm" {
   default     = false
 }
 
+variable "enable_http_request_logging" {
+  description = "Habilita temporariamente logs HTTP seguros somente em homologação."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.enable_http_request_logging || var.deployment_environment == "homolog"
+    error_message = "Os logs HTTP de homologação não podem ser habilitados em produção."
+  }
+}
+
 variable "deployment_environment" {
   description = "Ambiente selecionado pelo GitHub Actions; local é o fallback de desenvolvimento."
   type        = string

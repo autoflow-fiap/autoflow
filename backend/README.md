@@ -132,3 +132,13 @@ check JaCoCo configurado no Maven. Os detalhes estão em [`testing-and-quality.m
 - tokens públicos são aleatórios, expiráveis e persistidos como hash;
 - senhas e segredos devem ser injetados por ambiente ou Secret;
 - tokens e credenciais não devem ser registrados em logs.
+
+## Logs HTTP de homologação
+
+O log de conclusão HTTP está desabilitado por padrão. Para uma validação temporária em homologação, configure a variável
+do GitHub Environment `ENABLE_HTTP_REQUEST_LOGGING` como `true`; a configuração Terraform a injeta no backend e rejeita
+a habilitação em produção. Mesmo habilitado, somente `GET /clientes/me` gera um evento INFO, com método, rota fixa,
+status e duração em milissegundos. O `request.id` permanece no MDC; `trace.id` e `span.id` dependem da decoração
+existente do agente New Relic. Na verificação local com o agente 9.5.0, esses dois identificadores foram observados no
+sufixo `NR-LINKING` da mensagem, não como entradas MDC; o filtro não os cria nem os copia. Não são registrados query
+string, corpo ou headers, e o forwarding de logs pelo agente continua desabilitado.

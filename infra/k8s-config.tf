@@ -3,12 +3,13 @@ locals {
     rds_address = data.terraform_remote_state.database.outputs.postgres_endpoint
   }))
   gateway_config = {
-    CORS_ALLOWED_ORIGINS     = join(",", sort(distinct(concat([var.gateway_public_origin], tolist(var.gateway_cors_origins)))))
-    APP_PUBLIC_BASE_URL      = "${var.gateway_public_origin}/api"
-    FRONTEND_PUBLIC_BASE_URL = var.gateway_public_origin
-    DEPLOYMENT_ENVIRONMENT   = var.deployment_environment
-    NEW_RELIC_LABELS         = "environment:${var.deployment_environment}"
-    SPRING_APPLICATION_NAME  = "autoflow-backend"
+    CORS_ALLOWED_ORIGINS                           = join(",", sort(distinct(concat([var.gateway_public_origin], tolist(var.gateway_cors_origins)))))
+    APP_PUBLIC_BASE_URL                            = "${var.gateway_public_origin}/api"
+    FRONTEND_PUBLIC_BASE_URL                       = var.gateway_public_origin
+    DEPLOYMENT_ENVIRONMENT                         = var.deployment_environment
+    NEW_RELIC_LABELS                               = "environment:${var.deployment_environment}"
+    SPRING_APPLICATION_NAME                        = "autoflow-backend"
+    APP_OBSERVABILITY_HTTP_REQUEST_LOGGING_ENABLED = tostring(var.enable_http_request_logging)
   }
 }
 
