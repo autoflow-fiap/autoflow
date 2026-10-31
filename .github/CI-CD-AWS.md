@@ -8,8 +8,8 @@ ordem operacional do deploy.
 
 | Branch | GitHub Environment | Ação em `workflow_dispatch` | Cluster EKS esperado |
 |---|---|---|---|
-| `develop` | `homolog` | `apply=false`: Plan; `apply=true`: publicar imagens, Plan, Apply aprovado e rollout com smoke tests | `eks-autoflow` |
-| `main` | `production` | `apply=false`: Plan; `apply=true`: publicar imagens, Plan, Apply aprovado e rollout | `eks-autoflow-production` |
+| `develop` | `homolog` | `apply=false`: Plan; `apply=true`: publicar imagens, Plan, Apply aprovado, rollout e smoke tests; `smoke_tests_only=true`: smoke tests isolados | `eks-autoflow` |
+| `main` | `production` | `apply=false`: Plan; `apply=true`: publicar imagens, Plan, Apply aprovado, rollout e smoke tests; `smoke_tests_only=true`: smoke tests isolados | `eks-autoflow-production` |
 
 O workflow `.github/workflows/ci.yml` executa automaticamente em Pull Requests para `develop`/`main` e pushes para
 `develop`, `main` e `feature/*`: testes, builds, análises de segurança e validação Terraform local. Também constrói imagens
@@ -19,7 +19,7 @@ No caminho automático, um gate consulta `AUTO_CD_ENABLED` no Environment corres
 repositório, branch e SHA. Somente a conclusão `success` da execução exata libera os jobs do CD; falha, cancelamento,
 `skipped`, divergência ou timeout bloqueia o Plan. O checkout do CD usa e confirma o SHA validado. PRs e branches
 `feature/**` não iniciam CD. Uma execução manual em outra branch não alcança os jobs do CD. Smoke tests manuais são
-exclusivos de `develop`.
+exclusivos de `workflow_dispatch` em `develop`/`main`; a seleção `homolog`/`production` usa a saída validada pelo gate.
 
 O workflow existente `pr-automatico.yaml` abre um Pull Request para `develop` após push em qualquer branch diferente
 de `develop`. O evento de Pull Request executa somente CI; publicação, Plan e Apply não são disparados por push ou PR.
@@ -40,6 +40,12 @@ externamente a proteção/ruleset de `main` e checks CI. Defina `TERRAFORM_APPLY
 somente depois de confirmar a regra no GitHub. A flag é um guard adicional; não substitui a proteção do Environment.
 O Apply continua exigindo `apply=true`, aprovação independente do Environment e o marcador. A aprovação de Plan, inclusive
 de um Plan automático, não autoriza Apply.
+
+O job `smoke-tests` associa-se ao mesmo Environment validado pelo gate e mantém `needs: [gate, deploy-apply]`. Cada
+execução de smoke tests é um deployment adicional sujeito aos Required reviewers daquele Environment; após um Apply,
+isso pode exigir uma nova aprovação. A execução isolada também aguarda aprovação antes de receber as credenciais. Esse
+é o efeito necessário para consumir Environment Secrets sem alterar as regras existentes; a aprovação do Apply não é
+reutilizada pelo deployment separado de smoke tests.
 
 ## Conta, região, States e seleção de recursos
 
@@ -81,9 +87,16 @@ Configure as credenciais AWS temporárias e os dados da aplicação separadament
 keys, credenciais de banco/JWT e configuração New Relic coerentes dentro do mesmo Environment. Consulte a
 [matriz completa](../docs/variables-and-secrets.md); não duplique Secrets de produção em homologação.
 
-`DOCKERHUB_PASSWORD`, `SONAR_TOKEN` e `SNYK_TOKEN` são credenciais compartilhadas de CI/publicação e permanecem como
-Repository Secrets. `DOCKERHUB_USERNAME` é Repository Variable compartilhada. `AUTOFLOW_TEST_CPF_CNPJ` e
-`AUTOFLOW_TEST_PASSWORD`, quando usados, pertencem somente a homologação e devem ser dados sintéticos.
+`SONAR_TOKEN` e `SNYK_TOKEN` permanecem Repository Secrets porque são usados por jobs sem Environment nos workflows de
+CI/CD. `DOCKERHUB_PASSWORD` é Repository Secret e `DOCKERHUB_USERNAME` é Repository Variable enquanto não forem
+cadastrados nos Environments; o job protegido de publicação ainda depende desses valores globais. O inventário de cópias
+globais removíveis após esta alteração está em [variables-and-secrets.md](../docs/variables-and-secrets.md).
+
+`AUTOFLOW_TEST_CPF_CNPJ` e `AUTOFLOW_TEST_PASSWORD` são Secrets opcionais. Na configuração consultada em 30/10/2026,
+estão no Repository e não nos Environments. Para preservar os testes autenticados existentes em `homolog`, o job mantém
+fallback temporário a esses dois Repository Secrets somente nesse ambiente; `production` nunca usa o fallback global.
+Cadastre o par em cada Environment onde o login autenticado for desejado e, depois de validar homologação, remova a
+compatibilidade e as cópias globais. Use dados sintéticos e separados por ambiente.
 
 Para habilitar CD automático, configure a nova Environment Variable `AUTO_CD_ENABLED` com o valor literal `true` no
 Environment `homolog` e/ou `production`. Cada Environment é independente; variável ausente ou diferente de `true`

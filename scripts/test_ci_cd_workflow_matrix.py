@@ -88,6 +88,42 @@ class CiCdWorkflowMatrixTests(unittest.TestCase):
         self.assertIn("github.event_name == 'workflow_dispatch'", smoke)
         self.assertNotIn("github.event_name == 'push'", smoke)
 
+    def test_smoke_tests_use_the_environment_validated_for_each_branch(self):
+        content = (WORKFLOWS / "pipeline.yml").read_text(encoding="utf-8")
+        smoke = section(content, "smoke-tests")
+
+        self.assertIn("needs: [gate, deploy-apply]", smoke)
+        self.assertIn("environment: ${{ needs.gate.outputs.environment }}", smoke)
+        self.assertIn("GITHUB_DEPLOYMENT_ENVIRONMENT: ${{ needs.gate.outputs.environment }}", smoke)
+        self.assertIn("inputs.smoke_tests_only", smoke)
+        self.assertIn("needs.deploy-apply.result == 'success'", smoke)
+        self.assertIn("github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'", smoke)
+        self.assertIn("github.ref != 'refs/heads/main' || github.ref_protected", smoke)
+        self.assertIn("autoflow-${GITHUB_DEPLOYMENT_ENVIRONMENT}", smoke)
+        self.assertNotIn("autoflow-homolog", smoke)
+
+    def test_smoke_tests_require_environment_scoped_aws_credentials_before_use(self):
+        content = (WORKFLOWS / "pipeline.yml").read_text(encoding="utf-8")
+        smoke = section(content, "smoke-tests")
+        configuration_check = smoke.split("id: environment-config", 1)[1].split("- uses: aws-actions/configure-aws-credentials@v4", 1)[0]
+
+        self.assertIn("actions: read", smoke)
+        self.assertIn("environments/$GITHUB_DEPLOYMENT_ENVIRONMENT/variables", configuration_check)
+        self.assertIn("API_GATEWAY_CORS_ORIGINS AWS_REGION AWS_EXPECTED_ACCOUNT_ID", configuration_check)
+        self.assertIn("environments/$GITHUB_DEPLOYMENT_ENVIRONMENT/secrets", configuration_check)
+        self.assertIn("AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN", configuration_check)
+        self.assertLess(smoke.index("id: environment-config"), smoke.index("aws-actions/configure-aws-credentials@v4"))
+        self.assertIn("python scripts/verify_aws_account.py", smoke)
+
+    def test_optional_smoke_credentials_do_not_fall_back_to_repository_secrets_in_production(self):
+        content = (WORKFLOWS / "pipeline.yml").read_text(encoding="utf-8")
+        smoke = section(content, "smoke-tests")
+
+        self.assertIn("AUTOFLOW_TEST_CPF_CNPJ", smoke)
+        self.assertIn("AUTOFLOW_TEST_PASSWORD", smoke)
+        self.assertIn("steps.environment-config.outputs.environment_test_credentials == 'true'", smoke)
+        self.assertIn("env.GITHUB_DEPLOYMENT_ENVIRONMENT == 'homolog'", smoke)
+
 
 if __name__ == "__main__":
     unittest.main()

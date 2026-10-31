@@ -204,8 +204,11 @@ class PreflightTests(unittest.TestCase):
             self.assertNotIn("feature/", privileged_job)
         self.assertIn("github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'", plan)
         self.assertIn("github.ref == 'refs/heads/develop'", apply)
+        self.assertIn("github.ref == 'refs/heads/main'", apply)
         self.assertNotIn("github.ref == 'refs/heads/feature/'", smoke)
-        self.assertIn("inputs.smoke_tests_only && github.ref == 'refs/heads/develop'", smoke)
+        self.assertIn("inputs.smoke_tests_only", smoke)
+        self.assertIn("github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'", smoke)
+        self.assertIn("environment: ${{ needs.gate.outputs.environment }}", smoke)
         self.assertNotIn("smoke_api_gateway.py", docker_build)
 
     def test_feature_terraform_validation_is_offline_and_does_not_read_remote_state(self):

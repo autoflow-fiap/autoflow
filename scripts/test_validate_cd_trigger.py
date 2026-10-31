@@ -91,6 +91,21 @@ class ValidateCdTriggerTests(unittest.TestCase):
         self.assertEqual(result["sha"], SHA)
         self.assertEqual(result["environment"], "homolog")
 
+    def test_manual_smoke_context_selects_environment_from_validated_branch(self):
+        for branch, environment in (("develop", "homolog"), ("main", "production")):
+            with self.subTest(branch=branch):
+                result = validate_trigger(
+                    "workflow_dispatch",
+                    {"ref": f"refs/heads/{branch}"},
+                    auto_cd_enabled="",
+                    repository=REPOSITORY,
+                    repository_id=REPOSITORY_ID,
+                    github_ref=f"refs/heads/{branch}",
+                    github_sha=SHA,
+                    github_ref_protected="true" if branch == "main" else "false",
+                )
+                self.assertEqual(result["environment"], environment)
+
     def test_feature_and_pull_request_events_are_rejected(self):
         with self.assertRaises(TriggerError):
             self.validate_push(push_event(branch="feature/unsafe"))
