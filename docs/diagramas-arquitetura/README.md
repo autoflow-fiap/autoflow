@@ -30,15 +30,3 @@ A fonte Mermaid está em [`arquitetura-deploy-fase-2.mermaid`](arquitetura-deplo
 5. Após os builds, as imagens são publicadas no Docker Hub.
 6. Em push para `develop`, o job `deploy-aws` executa Terraform para provisionar/atualizar a AWS e aplicar os
    manifestos Kubernetes versionados.
-
-## Diferenças em relação à configuração atual
-
-- Os Deployments usam a tag mutável `latest`.
-- O HPA do backend é gerenciado pelo Terraform da aplicação, com mínimo 1, máximo 3 réplicas e CPU-alvo de 50%; `ignore_fields = ["spec.replicas"]` deixa a contagem sob controle do HPA. Isso é configuração declarada, não validação operacional: o Learner Lab foi resetado e o recurso precisa ser verificado após recriar a infraestrutura.
-- O bucket S3 `state-autoflow-terraform` é criado/validado pelo pipeline e não é representado como backend remoto
-  Terraform no desenho.
-- O perfil local em [`k8s-local/`](../../k8s-local/) usa PostgreSQL StatefulSet e Metrics Server; ele não deve ser
-  confundido com o perfil AWS/EKS representado no desenho principal.
-
-Essas observações descrevem limitações operacionais do fluxo atual. O desenho não contém credenciais, tokens ou valores
-de Secret.
