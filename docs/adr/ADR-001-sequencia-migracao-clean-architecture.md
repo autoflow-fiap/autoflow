@@ -1,71 +1,83 @@
-# ADR-001 — Sequência de migração para Clean Architecture
+# ADR-001 — Migração incremental para Clean Architecture
 
-## Situacao
-
-Aceita; implementação evoluída desde o contexto inicial descrito abaixo.
+- **Status:** Aceita.
+- **Data:** 12/07/2026.
+- **Escopo:** organização interna do backend Spring Boot, sem mudança pretendida de comportamento externo.
 
 ## Contexto
 
-Esta decisão foi registrada durante uma etapa anterior da migração. O trecho a seguir descreve o baseline daquela etapa,
-não a estrutura atual do backend:
+O baseline descrito quando esta decisão foi registrada organizava o backend por função técnica:
 
 ```text
-controller -> service -> mapper -> repository -> domain/JPA entity -> database
+controller → service → mapper → repository → entidade de domínio/JPA → banco
 ```
 
-Evidências do baseline histórico:
+O histórico da ADR registra controllers, services, mappers e repositories como estruturas transversais. Services conheciam DTOs REST, mappers e repositories Spring Data concretos; entidades JPA estavam no pacote `domain`. Isso fazia a regra de negócio depender de detalhes de persistência e apresentação, dificultava testar casos de uso sem infraestrutura e tornava mudanças de banco ou HTTP arriscadas para o núcleo.
 
-- A organização então observada usava `controller`, `service`, `mapper` e `repository` como camadas técnicas.
-- Entidades JPA e serviços de aplicação ainda estavam acoplados à estrutura anterior.
-- A ordem incremental foi escolhida para preservar contratos, regras de negócio e schema enquanto cada componente era migrado.
+As forças em oposição eram separar responsabilidades e proteger o domínio, mas continuar entregando funcionalidades sem interromper a evolução, preservar a API consumida pelo Angular e não misturar reorganização de pacotes com alterações de regra, autorização ou schema. A Ordem de Serviço (OS) concentra estados e integrações de orçamento, estoque, usuário, notificação, histórico e acompanhamento, portanto tem raio de regressão maior que CRUDs menores.
 
-A migracao precisa acontecer sem alterar endpoints, payloads, status HTTP, autorizacao, schema de banco, migrations ou comportamento observavel. O risco principal e iniciar por OS ou mover pacotes fisicamente de forma ampla, misturando reorganizacao arquitetural com mudanca funcional.
+Endpoints, payloads, status HTTP, autorização, mensagens observáveis, schema e migrations existentes são restrições de compatibilidade da refatoração. O histórico original não registra métricas comparativas nem um estudo formal de alternativas.
 
-## Decisao
+## Decisão
 
-A migracao para Clean Architecture sera incremental, por componente, em fatias pequenas e verificaveis. Nao sera feita uma reorganizacao global de pacotes em uma unica entrega.
+Adotar migração incremental por componente, em fatias pequenas, revisáveis e testáveis; não fazer uma reestruturação global em uma única entrega. A preferência registrada foi estabelecer primeiro a base transversal, usar `servico` como piloto de menor risco, seguir para `cliente` ou `veiculo` conforme a caracterização disponível, depois tratar `pecainsumo`/estoque e deixar OS para quando seus fluxos e gateways estivessem caracterizados.
 
-A ordem definida e:
+`servico` foi preferido no plano inicial por ter CRUD menor, testes existentes, soft-delete e métrica separável. `cliente` e `veiculo` eram opções aceitáveis com justificativa de risco; OS não deveria ser o primeiro piloto. Essa ordem é o plano histórico, não uma afirmação de que a migração ainda está pendente ou de que a cronologia de cada componente foi comprovada.
 
-1. Executar a base transversal da issue `[REFATORACAO] Revisar infraestrutura, cobertura e fronteiras arquiteturais`.
-2. Usar `servico` como piloto preferencial.
-3. Repetir o padrao em `cliente` ou `veiculo`, conforme disponibilidade de testes de caracterizacao.
-4. Migrar `pecainsumo` e estoque depois que gateways e adapters estiverem validados.
-5. Migrar OS somente depois de checklist minimo de caracterizacao e depois que gateways de estoque, usuario, orcamento, notificacao e historico estiverem definidos.
+As fronteiras atualmente verificáveis são:
 
-`servico` e o piloto preferencial porque possui CRUD menor, testes existentes, soft-delete e metrica separavel. `cliente` e `veiculo` continuam alternativas aceitaveis se a equipe registrar justificativa de risco. OS nao deve ser o primeiro piloto.
+| Área | Responsabilidade e regra |
+|---|---|
+| `domain` | Modelo e regras sem dependência de camadas externas ou frameworks técnicos. |
+| `application` | Portas de entrada, casos de uso, modelos internos e gateways de saída; casos de uso não dependem de Spring Data, HTTP ou entidades JPA. |
+| `infrastructure` | Adapters, entidades/repositories JPA, segurança e integrações técnicas; implementa gateways definidos pela aplicação. |
+| `presentation` | Controllers, validação e mapeamento dos contratos HTTP para entradas/saídas da aplicação; não acessa persistência diretamente. |
+| `config` | Composição de beans e configurações, sem regras de negócio. |
 
-A convencao de packages alvo e:
+A implementação atual já apresenta `presentation`, `application`, `domain`, `infrastructure` e `config`, use cases e gateways, adapters de persistência e um teste ArchUnit de fronteiras. A arquitetura é um monólito Spring Boot. Permanecem dependências técnicas limitadas, como anotações de composição Spring/Lombok em partes da aplicação, registradas em [`architecture.md`](../architecture.md); a decisão não afirma isolamento absoluto de frameworks.
 
-| Camada | Destino | Regra |
-|---|---|---|
-| Domain puro | `backend/src/main/java/com/autoflow/domain/<componente>` | Nao deve importar Spring, JPA, Hibernate, HTTP, mensageria, DTO REST ou repository concreto. |
-| Application | `backend/src/main/java/com/autoflow/application/<componente>` | Deve conter use cases, commands, queries e DTOs internos. |
-| Gateways | `backend/src/main/java/com/autoflow/application/gateway` | Use cases devem depender destes contratos, nao de Spring Data. |
-| Persistence | `backend/src/main/java/com/autoflow/infrastructure/persistence/<componente>` | Deve conter adapters, mappers de persistencia e detalhes JPA do componente migrado. |
-| Spring Data repositories | `backend/src/main/java/com/autoflow/infrastructure/persistence/repository` | Repositories concretos ficam na infraestrutura quando houver migracao fisica. |
-| REST | `backend/src/main/java/com/autoflow/presentation/rest/<componente>` | Destino de controllers, requests e responses REST. A movimentacao fisica so ocorre com testes de contrato do componente. |
+Para cada componente, a migração deve caracterizar contratos e falhas, mapear dependências, separar portas/use cases e adapters, manter os DTOs REST compatíveis e executar testes de unidade, integração, contrato/comportamento e arquitetura disponíveis antes de avançar. OS exige caracterização de abertura, diagnóstico, orçamento, execução, estoque, histórico, acompanhamento, entrega, métricas e erros.
 
-Enquanto um componente nao for migrado, os pacotes legados podem permanecer como estao. A convencao `presentation/rest` pode ser documentada antes da movimentacao fisica.
+## Alternativas consideradas
 
-Antes de migrar um componente, devem existir contrato REST caracterizado, testes de sucesso e falhas relevantes, dependencias mapeadas, criterios de preservacao do frontend e decisao explicita de package conforme esta ADR.
+As opções abaixo são uma análise retrospectiva baseada na estrutura observada e no contexto registrado; não há evidência de benchmark ou avaliação formal comparativa da equipe.
 
-Antes de migrar OS, devem estar caracterizados pelo menos abertura, inclusao de servico solicitado, atribuicao de mecanico, diagnostico, itens necessarios, laudo, orcamento, aprovacao ou recusa, execucao, baixa de estoque, historico, acompanhamento do cliente, entrega, metricas e erros principais. `OrdemServicoFluxoIT`, `OrdemServicoServiceTest` e testes de controller devem servir como baseline antes de qualquer separacao JPA/use cases em OS.
+| Alternativa | Vantagens | Desvantagens | Motivo para não adotá-la |
+|---|---|---|---|
+| Migração incremental por componente (decisão) | Limita o raio de mudança, permite comparar comportamento por fatia e prioriza componentes menores antes de OS. | Mantém temporariamente duas formas de organização; exige disciplina de fronteiras, testes e revisão para evitar dependências cruzadas. | Adotada para equilibrar redução de acoplamento com continuidade de entrega e preservação de contratos. |
+| Reestruturação completa em uma etapa | Uniformiza os pacotes rapidamente e evita coexistência prolongada. | Grande diff e raio de regressão; combina mudanças estruturais em muitos domínios e dificulta isolar falhas, especialmente em OS. | Não escolhida pelo risco de alteração simultânea de contratos, persistência e regras, sem evidência de caracterização global suficiente. |
+| Manter a organização técnica anterior | Menor custo imediato e menos movimentação de código. | Preserva dependência entre services, DTOs, repositories concretos e entidades JPA; evolução de domínio continua condicionada a frameworks. | Não resolve o acoplamento e a testabilidade que motivaram a decisão. |
 
-## Situação observada atualmente
+## Consequências positivas
 
-O código atual está organizado nos pacotes `presentation`, `application`, `domain`, `infrastructure` e `config`. A documentação da estrutura e das fronteiras verificadas está em [`architecture.md`](../architecture.md). A migração estrutural descrita no contexto histórico já avançou; esta ADR permanece como registro da decisão de migrar incrementalmente e preservar contratos, não como descrição do layout atual.
+- A direção de dependências fica explícita e verificável, com domínio no núcleo e infraestrutura substituível por portas.
+- Regras e casos de uso podem ser testados sem iniciar o banco ou o contexto web quando a unidade permitir.
+- A migração por fatias facilita revisão, localização de regressões e preservação dos contratos existentes.
+- Adapters concentram conversões entre objetos de domínio e persistência; apresentação concentra conversões REST.
 
-## Consequências
+## Consequências negativas
 
-Fica mais facil executar a migracao com rastreabilidade, porque a equipe passa a ter uma ordem clara, um piloto preferencial, criterios de entrada e saida por componente e uma regra explicita para adiar OS ate existir caracterizacao suficiente.
+- A coexistência temporária de componentes migrados e não migrados acrescenta complexidade e pode perpetuar duas convenções.
+- Portas, DTOs internos, mappers e adapters aumentam o número de tipos e arquivos.
+- A proteção depende de testes de fronteira e de revisão contínua; os testes não comprovam por si só a equivalência de todo comportamento histórico.
+- As dependências residuais de Spring/Lombok na aplicação limitam a pureza arquitetural e devem ser monitoradas sem ampliar o acoplamento.
 
-Fica mais facil preservar contratos publicos, porque endpoints, payloads, status HTTP, autorizacao, mensagens REST e schema de banco passam a ser restricoes formais da migracao, nao detalhes implicitos.
+## Riscos e mitigação
 
-Fica mais facil revisar cards de componente, porque novos gateways devem ficar em `application/gateway`, repositories/adapters concretos em `infrastructure/persistence`, e controllers REST so devem se mover fisicamente para `presentation/rest` quando o componente estiver coberto por testes de contrato.
+| Risco | Mitigação definida/observável |
+|---|---|
+| Regressão em HTTP, autorização ou comportamento do frontend durante movimentação | Caracterizar rotas, payloads, status e falhas antes da alteração; manter requests/responses e validar controllers/integrações. O OpenAPI e testes estão versionados; execução atual não é inferida. |
+| Mudança acidental de schema ou regra de persistência | Separar refatoração de migrations e mudanças funcionais; revisar Flyway e adapters por componente. |
+| Coexistência virar estado permanente ou gerar dependências entre camadas | Aplicar os limites de pacote e `ArchitectureBoundaryTest`; registrar exceções e não criar novos atalhos para código legado. |
+| OS sofrer regressão de fluxo cruzado | Não iniciar por OS; exigir caracterização dos fluxos e gateways listados antes de qualquer separação estrutural relevante. |
+| Confundir o plano inicial com o estado atual | Usar o layout do código e [`architecture.md`](../architecture.md) como descrição atual; tratar a sequência acima como histórico e não como backlog implícito. |
 
-Fica mais dificil fazer refatoracoes mecanicas amplas, porque movimentos globais de packages, inicio por OS ou mudancas de contrato como efeito colateral deixam de ser aceitaveis sem nova decisao ou card especifico.
+## Referências
 
-A equipe deve tratar esta ADR como pre-condicao das issues `[REFATORACAO] Extrair casos de uso de clientes preservando contratos REST`, `[REFATORACAO] Remover dependencia de seguranca e DTO REST do fluxo de veiculos`, `[REFATORACAO] Separar cadastro e metricas de servicos`, `[REFATORACAO] Isolar politica de estoque de pecas e insumos`, `[REFATORACAO] Extrair casos de uso da ordem de servico` e `[REFATORACAO] Revisar infraestrutura, cobertura e fronteiras arquiteturais`.
-
-Esta ADR nao altera runtime, endpoints, schema, migrations, frontend ou deploy. Qualquer mudanca de contrato REST deve ser tratada como nova decisao ou card, nao como efeito colateral de Clean Architecture.
+- [RFC-001 — Migração para Clean Architecture](../rfc/RFC-001-migracao-clean-architecture.md)
+- [Arquitetura da aplicação](../architecture.md)
+- [Convenção de pacotes](../conventions/package-convention.md)
+- [`ArchitectureBoundaryTest`](../../backend/src/test/java/com/autoflow/architecture/ArchitectureBoundaryTest.java)
+- [OpenAPI versionado](../openapi/README.md)
+- [Guia de testes e qualidade](../testing-and-quality.md)
+- [Registro original desta ADR no histórico](https://github.com/autoflow-fiap/autoflow/commit/e3ca42b2b50a3f06495bf7d6ef14cbbf79228392)

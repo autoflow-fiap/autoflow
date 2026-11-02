@@ -109,5 +109,7 @@ dashboards, alertas e Synthetic são gerenciados pelo root `autoflow-infra` conf
 - [Diagramas de sequência](docs/diagramas-sequencia/diagrama-sequencia.md)
 - [Fluxo de orçamento público](docs/fluxo-orcamento-publico.md)
 - [ADR-001 — migração para Clean Architecture](docs/adr/ADR-001-sequencia-migracao-clean-architecture.md)
+- [RFC-001 — migração para Clean Architecture](docs/rfc/RFC-001-migracao-clean-architecture.md)
 - [ADR-002 — Kubernetes e Terraform](docs/adr/ADR-002-adocao-kubernetes-terraform.md)
+- [RFC-002 — Kubernetes e Terraform](docs/rfc/RFC-002-kubernetes-terraform.md)
 - [Recursos New Relic declarados pela infraestrutura](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/infra/newrelic/README.md)
