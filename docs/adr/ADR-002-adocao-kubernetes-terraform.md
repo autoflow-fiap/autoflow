@@ -74,6 +74,6 @@ Comparação retrospectiva de opções tecnicamente plausíveis; os registros co
 - [RFC-002 — Kubernetes e Terraform](../rfc/RFC-002-kubernetes-terraform.md)
 - [README e ordem dos roots](../../README.md#ordem-de-provisionamento)
 - [Manifesto HPA](../../k8s/hpa.yaml) e [Terraform de Deployments/HPA](../../infra/k8s-deployment.tf)
-- [Diagrama histórico de deploy da Fase 2 e limites](../diagramas-arquitetura/README.md)
+- [Arquitetura de infraestrutura vigente — API Gateway, VPC Link e ALB](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/api-gateway/arquitetura.md)
 - [Runbook de primeiro provisionamento e State](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/eks-primeiro-provisionamento.md)
 - [Registro original da ADR no histórico](https://github.com/autoflow-fiap/autoflow/commit/ce0d71b47ddd180c017c50a12321a9e0f8afd010)
