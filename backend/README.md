@@ -65,8 +65,8 @@ presentation → application → domain
 ```
 
 Controllers e mappers REST adaptam HTTP; a aplicação concentra portas, casos de uso, políticas e modelos internos; o
-domínio mantém regras; a infraestrutura implementa persistência, segurança e integrações. O detalhamento está em [
-`docs/architecture.md`](../docs/architecture.md) e [`package-convention.md`](../docs/conventions/package-convention.md).
+domínio mantém regras; a infraestrutura implementa persistência, segurança e integrações. O detalhamento está em
+[`docs/architecture.md`](../docs/architecture.md) e [`package-convention.md`](../docs/conventions/package-convention.md).
 
 ## Funcionalidades e métricas
 
@@ -91,7 +91,7 @@ Para a demonstração ponta a ponta do login serverless por CPF/CNPJ, use a
 - OpenAPI: <http://localhost:8081/v3/api-docs>;
 - [OpenAPI versionado](../docs/openapi/autoflow-api.json);
 - [Guia de execução da API](../docs/openapi/README.md);
-- [Diagramas de sequência](../docs/diagramas-sequencia/diagrama-sequencia.md);
+- [Diagrama de sequência da abertura de OS](../docs/diagramas-sequencia/fluxo_principal.md);
 - [Fluxo público de orçamento](../docs/fluxo-orcamento-publico.md).
 
 Endpoints públicos de orçamento não exigem JWT, mas exigem `token` na query string:
@@ -103,8 +103,8 @@ Endpoints públicos de orçamento não exigem JWT, mas exigem `token` na query s
 | `POST` | `/public/orcamentos/{id}/aprovar` | Aprovar             |
 | `POST` | `/public/orcamentos/{id}/recusar` | Recusar             |
 
-Os detalhes de validade, auditoria e efeitos na OS estão em [
-`fluxo-orcamento-publico.md`](../docs/fluxo-orcamento-publico.md).
+Os detalhes de validade, auditoria e efeitos na OS estão em
+[`fluxo-orcamento-publico.md`](../docs/fluxo-orcamento-publico.md).
 
 ## Dados de demonstração
 
