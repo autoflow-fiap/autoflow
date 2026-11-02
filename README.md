@@ -30,7 +30,7 @@ flowchart LR
 
 Para a arquitetura C4, rede, autenticação e integração entre os serviços, consulte
 [arquitetura do API Gateway](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/api-gateway/arquitetura.md).
-O fluxo de abertura da OS está em [fluxo_principal.mermaid](docs/diagramas-sequencia/fluxo_principal.mermaid).
+O fluxo de abertura da OS está em [fluxo_principal.md](docs/diagramas-sequencia/fluxo_principal.md).
 
 ## Executar e validar localmente
 
@@ -106,7 +106,7 @@ dashboards, alertas e Synthetic são gerenciados pelo root `autoflow-infra` conf
 ## Documentação relacionada
 
 - [Arquitetura e limites das camadas](docs/architecture.md)
-- [Diagramas de sequência](docs/diagramas-sequencia/diagrama-sequencia.md)
+- [Diagrama de sequência da abertura de OS](docs/diagramas-sequencia/fluxo_principal.md)
 - [Fluxo de orçamento público](docs/fluxo-orcamento-publico.md)
 - [ADR-001 — migração para Clean Architecture](docs/adr/ADR-001-sequencia-migracao-clean-architecture.md)
 - [RFC-001 — migração para Clean Architecture](docs/rfc/RFC-001-migracao-clean-architecture.md)

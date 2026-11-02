@@ -91,7 +91,7 @@ Para a demonstração ponta a ponta do login serverless por CPF/CNPJ, use a
 - OpenAPI: <http://localhost:8081/v3/api-docs>;
 - [OpenAPI versionado](../docs/openapi/autoflow-api.json);
 - [Guia de execução da API](../docs/openapi/README.md);
-- [Diagramas de sequência](../docs/diagramas-sequencia/diagrama-sequencia.md);
+- [Diagrama de sequência da abertura de OS](../docs/diagramas-sequencia/fluxo_principal.md);
 - [Fluxo público de orçamento](../docs/fluxo-orcamento-publico.md).
 
 Endpoints públicos de orçamento não exigem JWT, mas exigem `token` na query string:

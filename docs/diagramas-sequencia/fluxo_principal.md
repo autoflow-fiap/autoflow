@@ -1,48 +1,45 @@
-# Fluxo principal da Ordem de Serviço
+# Diagrama de sequência — Abertura da ordem de serviço
 
-Este diagrama representa o fluxo de abertura da OS, incluindo autenticação via JWT, encaminhamento pela API Gateway, processamento no backend Spring Boot e persistência no banco relacional.
+O fluxo resume a abertura autenticada de uma OS sem detalhar componentes internos do backend. Na rota externa do API Gateway, o frontend chama `POST /api/ordens-servico`; a integração remove `/api` e encaminha `POST /ordens-servico` ao backend. O contrato OpenAPI versionado descreve o endpoint do backend, protegido por Bearer JWT, e declara `201 Created` para a criação bem-sucedida. O diagrama de login CPF/CNPJ e emissão do JWT está na [arquitetura do API Gateway](https://github.com/autoflow-fiap/autoflow-infra/blob/docs%2Farchitecture-adrs-rfcs-20261102/docs/api-gateway/arquitetura.md).
 
 ```mermaid
----
-config:
-  theme: mc
----
 sequenceDiagram
     autonumber
     actor Atendente
     participant Frontend as Frontend Angular
-    participant Gateway as API Gateway HTTP API v2
-    participant ALB as ALB interno via VPC Link
-    participant Backend as Backend Spring Boot no EKS
-    participant Security as Spring Security / JWT
-    participant OSController as Controller de Ordem de Serviço
-    participant OSUseCases as Caso de uso de abertura da OS
-    participant Cliente as Caso de uso de cliente
-    participant Veiculo as Caso de uso de veículo
-    participant DB as RDS PostgreSQL
+    participant Gateway as API Gateway
+    participant Backend as Backend Spring Boot
+    participant DB as PostgreSQL
 
-    Note over Atendente,Frontend: O JWT foi obtido previamente pelo fluxo de autenticação CPF/CNPJ.
-    Atendente->>Frontend: Informa cliente, veículo e serviços
+    Note over Atendente,Frontend: JWT obtido previamente pelo fluxo de autenticação CPF/CNPJ.
+    Atendente->>Frontend: Informa CPF/CNPJ do cliente, veículo e serviços
     Frontend->>Gateway: POST /api/ordens-servico + Bearer JWT
-    Gateway->>ALB: HTTP_PROXY pelo VPC Link
-    ALB->>Backend: Encaminha ao serviço Spring Boot
-    Backend->>Security: Autenticar e autorizar requisição
-    Security->>DB: Carregar usuário/perfil atual pelo subject do JWT
-    DB-->>Security: Usuário e perfil
-    Security-->>Backend: Identidade autorizada
-    Backend->>OSController: Requisição autenticada
-    OSController->>OSUseCases: criar(cpfCnpj, veículo, serviços)
-    OSUseCases->>Cliente: buscarPorCpfCnpj(cpfCnpj)
-    Cliente->>DB: Consultar cliente
-    DB-->>Cliente: Cliente encontrado
-    OSUseCases->>Veiculo: buscar ou associar veículo ao cliente
-    Veiculo->>DB: Consultar/cadastrar veículo
-    DB-->>Veiculo: Veículo associado
-    OSUseCases->>DB: Salvar OS, serviços solicitados e histórico
-    DB-->>OSUseCases: OS criada
-    OSUseCases-->>OSController: OrdemServicoResponse
-    OSController-->>Backend: Resposta HTTP 201
-    Backend-->>ALB: Resposta
-    ALB-->>Gateway: Resposta
-    Gateway-->>Frontend: HTTP 201 — OrdemServicoResponse
+    Gateway->>Backend: HTTP_PROXY pelo VPC Link, encaminha POST /ordens-servico
+    Backend->>Backend: Valida assinatura e expiração do JWT e extrai CPF/CNPJ do subject
+    Backend->>DB: Recarrega usuário, perfil e estado atuais pelo subject
+    DB-->>Backend: Usuário e perfil atuais
+    Backend->>Backend: Autoriza perfil ATENDENTE ou ADMIN e valida o payload
+    Backend->>DB: Busca cliente pelo CPF/CNPJ informado
+    DB-->>Backend: Dados do cliente
+    Backend->>DB: Busca ou cadastra veículo associado ao cliente
+    DB-->>Backend: Veículo associado
+    loop Para cada serviço solicitado
+        Backend->>DB: Consulta serviço e obtém nome e valor atuais
+        DB-->>Backend: Serviço encontrado
+    end
+    Backend->>DB: Persiste OS RECEBIDA, serviços solicitados e histórico
+    DB-->>Backend: OS criada
+    Backend->>Backend: Gera token de acompanhamento e prepara link de resposta
+    Backend->>DB: Persiste hash do token e validade de 30 dias
+    DB-->>Backend: Hash e validade persistidos
+    Note over Backend,DB: A notificação do link é tentada quando há e-mail e falha é tratada sem desfazer a OS.
+    Backend-->>Gateway: HTTP 201 Created + OrdemServicoResponse e acompanhamentoUrl
+    Gateway-->>Frontend: HTTP 201 Created + OrdemServicoResponse
+    Frontend-->>Atendente: Exibe a OS criada
 ```
+
+## Referências
+
+- [Contrato OpenAPI versionado](../openapi/autoflow-api.json)
+- [Documentação e operação `POST /ordens-servico`](../openapi/README.md)
+- [Arquitetura e rotas do API Gateway](https://github.com/autoflow-fiap/autoflow-infra/blob/docs%2Farchitecture-adrs-rfcs-20261102/docs/api-gateway/arquitetura.md)

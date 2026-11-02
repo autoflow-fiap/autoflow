@@ -7,12 +7,12 @@ unidade, mas separa regras de negócio, casos de uso, adapters técnicos e HTTP.
 
 ```text
 presentation ──→ application ──→ domain
-       │              ↑
-       └────────────── infrastructure
+infrastructure ──→ application
+config ──→ presentation / application / infrastructure
 ```
 
-As setas representam dependência de código. A infraestrutura implementa portas definidas pela aplicação; a apresentação
-não acessa repositories ou entidades JPA diretamente.
+As setas representam dependência de código. A infraestrutura implementa portas definidas pela aplicação, enquanto `config`
+faz a composição das implementações. A apresentação não acessa repositories ou entidades JPA diretamente.
 
 ## Camadas e pacotes
 

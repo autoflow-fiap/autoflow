@@ -88,5 +88,5 @@ Os ambientes versionados usam o prefixo `/api`. Em desenvolvimento, o proxy apon
 
 - [README principal](../README.md);
 - [README do backend](../backend/README.md);
-- [Diagramas de sequência](../docs/diagramas-sequencia/diagrama-sequencia.md);
+- [Diagrama de sequência da abertura de OS](../docs/diagramas-sequencia/fluxo_principal.md);
 - [Fluxo público de orçamento](../docs/fluxo-orcamento-publico.md).
