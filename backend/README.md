@@ -65,8 +65,8 @@ presentation → application → domain
 ```
 
 Controllers e mappers REST adaptam HTTP; a aplicação concentra portas, casos de uso, políticas e modelos internos; o
-domínio mantém regras; a infraestrutura implementa persistência, segurança e integrações. O detalhamento está em [
-`docs/architecture.md`](../docs/architecture.md) e [`package-convention.md`](../docs/conventions/package-convention.md).
+domínio mantém regras; a infraestrutura implementa persistência, segurança e integrações. O detalhamento está em
+[`docs/architecture.md`](../docs/architecture.md) e [`package-convention.md`](../docs/conventions/package-convention.md).
 
 ## Funcionalidades e métricas
 
@@ -103,8 +103,8 @@ Endpoints públicos de orçamento não exigem JWT, mas exigem `token` na query s
 | `POST` | `/public/orcamentos/{id}/aprovar` | Aprovar             |
 | `POST` | `/public/orcamentos/{id}/recusar` | Recusar             |
 
-Os detalhes de validade, auditoria e efeitos na OS estão em [
-`fluxo-orcamento-publico.md`](../docs/fluxo-orcamento-publico.md).
+Os detalhes de validade, auditoria e efeitos na OS estão em
+[`fluxo-orcamento-publico.md`](../docs/fluxo-orcamento-publico.md).
 
 ## Dados de demonstração
 

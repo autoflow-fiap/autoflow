@@ -146,7 +146,7 @@ Os resultados de latência, taxa de erro, disponibilidade e scaling não têm me
 ## Referências
 
 - [ADR-002 — Adoção de Kubernetes e Terraform](../adr/ADR-002-adocao-kubernetes-terraform.md)
-- [README e ordem dos roots](../../README.md#ordem-de-provisionamento)
+- [README e ordem dos roots](../../README.md#implantação-e-cicd)
 - [Topologia e States do API Gateway](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/api-gateway/arquitetura.md)
 - [Runbook de primeiro provisionamento](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/eks-primeiro-provisionamento.md)
 - [Bootstrap isolado do bucket](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/state-bucket-bootstrap.md)

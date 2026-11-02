@@ -72,7 +72,7 @@ Comparação retrospectiva de opções tecnicamente plausíveis; os registros co
 ## Referências
 
 - [RFC-002 — Kubernetes e Terraform](../rfc/RFC-002-kubernetes-terraform.md)
-- [README e ordem dos roots](../../README.md#ordem-de-provisionamento)
+- [README e ordem dos roots](../../README.md#implantação-e-cicd)
 - [Manifesto HPA](../../k8s/hpa.yaml) e [Terraform de Deployments/HPA](../../infra/k8s-deployment.tf)
 - [Arquitetura de infraestrutura vigente — API Gateway, VPC Link e ALB](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/api-gateway/arquitetura.md)
 - [Runbook de primeiro provisionamento e State](https://github.com/autoflow-fiap/autoflow-infra/blob/develop/docs/eks-primeiro-provisionamento.md)

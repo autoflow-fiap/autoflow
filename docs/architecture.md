@@ -66,5 +66,5 @@ verifica, entre outras regras:
 - controllers em `presentation` e entidades JPA em `infrastructure.persistence`;
 - ausência de ciclos entre pacotes.
 
-Para nomes e critérios de movimentação, consulte [`package-convention.md`](conventions/package-convention.md) e [
-`ADR-001`](adr/ADR-001-sequencia-migracao-clean-architecture.md).
+Para nomes e critérios de movimentação, consulte [`package-convention.md`](conventions/package-convention.md) e
+[`ADR-001`](adr/ADR-001-sequencia-migracao-clean-architecture.md).

@@ -1,7 +1,7 @@
 # Convenção de pacotes — Clean Architecture
 
-Esta convenção descreve a estrutura atual do backend e complementa [`architecture.md`](../architecture.md) e [
-`ADR-001`](../adr/ADR-001-sequencia-migracao-clean-architecture.md).
+Esta convenção descreve a estrutura atual do backend e complementa [`architecture.md`](../architecture.md) e
+[`ADR-001`](../adr/ADR-001-sequencia-migracao-clean-architecture.md).
 
 ## Estrutura atual
 
@@ -72,6 +72,5 @@ Antes de mover uma classe ou componente:
 5. execute o teste arquitetural e a suíte afetada;
 6. registre a decisão quando a movimentação não seguir esta convenção.
 
-O teste [
-`ArchitectureBoundaryTest`](../../backend/src/test/java/com/autoflow/architecture/ArchitectureBoundaryTest.java) é a
-validação executável das fronteiras principais.
+O teste [`ArchitectureBoundaryTest`](../../backend/src/test/java/com/autoflow/architecture/ArchitectureBoundaryTest.java)
+é a validação executável das fronteiras principais.
