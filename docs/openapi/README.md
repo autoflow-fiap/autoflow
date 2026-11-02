@@ -52,7 +52,7 @@ Resposta esperada:
 }
 ```
 
-2. Envie o token nas rotas privadas:
+1. Envie o token nas rotas privadas:
 
 ```http
 Authorization: Bearer {{jwtToken}}

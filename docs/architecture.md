@@ -7,12 +7,12 @@ unidade, mas separa regras de negócio, casos de uso, adapters técnicos e HTTP.
 
 ```text
 presentation ──→ application ──→ domain
-       │              ↑
-       └────────────── infrastructure
+infrastructure ──→ application
+config ──→ presentation / application / infrastructure
 ```
 
-As setas representam dependência de código. A infraestrutura implementa portas definidas pela aplicação; a apresentação
-não acessa repositories ou entidades JPA diretamente.
+As setas representam dependência de código. A infraestrutura implementa portas definidas pela aplicação, enquanto `config`
+faz a composição das implementações. A apresentação não acessa repositories ou entidades JPA diretamente.
 
 ## Camadas e pacotes
 
@@ -66,5 +66,5 @@ verifica, entre outras regras:
 - controllers em `presentation` e entidades JPA em `infrastructure.persistence`;
 - ausência de ciclos entre pacotes.
 
-Para nomes e critérios de movimentação, consulte [`package-convention.md`](conventions/package-convention.md) e [
-`ADR-001`](adr/ADR-001-sequencia-migracao-clean-architecture.md).
+Para nomes e critérios de movimentação, consulte [`package-convention.md`](conventions/package-convention.md) e
+[`ADR-001`](adr/ADR-001-sequencia-migracao-clean-architecture.md).
